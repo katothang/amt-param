@@ -1,0 +1,4 @@
+<?jelly escape-by-default='true'?>
+<div>
+  List job parameters like Build With Parameters (including dynamic choices if available)
+</div>

@@ -1,0 +1,41 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+  <l:layout title="Params View">
+    <l:main-panel>
+      <h1>Parameters of ${it.job.displayName}</h1>
+
+      <j:set var="params" value="${it.effectiveParameters}"/>
+
+      <table class="pane">
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Default</th>
+          <th>Choices</th>
+          <th>Description</th>
+        </tr>
+        <j:forEach var="p" items="${params}">
+          <tr>
+            <td>${p.name}</td>
+            <td><code>${p.type}</code></td>
+            <td>${p.defaultValue}</td>
+            <td>
+              <j:if test="${p.choices != null &amp;&amp; !p.choices.isEmpty()}">
+                <ul>
+                  <j:forEach var="c" items="${p.choices}">
+                    <li>${c}</li>
+                  </j:forEach>
+                </ul>
+              </j:if>
+            </td>
+            <td>${p.description}</td>
+          </tr>
+        </j:forEach>
+      </table>
+
+      <p>
+        REST: <a href="${it.urlName}/api/json">API JSON</a>
+      </p>
+    </l:main-panel>
+  </l:layout>
+</j:jelly>

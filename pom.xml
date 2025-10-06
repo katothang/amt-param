@@ -1,0 +1,96 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0  http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.jenkins-ci.plugins</groupId>
+    <artifactId>plugin</artifactId>
+    <version>4.80</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>io.kanbanai</groupId>
+  <artifactId>amt-param</artifactId>
+  <version>1.0.2</version>
+  <packaging>hpi</packaging>
+  <name>amt-param</name>
+  <description>List job parameters like Build With Parameters (including dynamic choices if available)</description>
+  <url>https://example.com/params-view</url>
+
+  <properties>
+    <jenkins.version>2.414.3</jenkins.version>
+    <java.level>11</java.level>
+    <encoding>UTF-8</encoding>
+  </properties>
+
+  <!-- IMPORTANT: Jenkins artifacts are not in Maven Central -->
+  <repositories>
+    <repository>
+      <id>repo.jenkins-ci.org</id>
+      <url>https://repo.jenkins-ci.org/public/</url>
+    </repository>
+  </repositories>
+  <pluginRepositories>
+    <pluginRepository>
+      <id>repo.jenkins-ci.org</id>
+      <url>https://repo.jenkins-ci.org/public/</url>
+    </pluginRepository>
+  </pluginRepositories>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.jenkins-ci.main</groupId>
+      <artifactId>jenkins-core</artifactId>
+      <version>${jenkins.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.kohsuke.stapler</groupId>
+      <artifactId>stapler</artifactId>
+      <version>1785.1787.v44b_5610a_7c4a_</version>
+      <scope>provided</scope>
+    </dependency>
+    
+    <!-- Optional dependencies - commented out due to version conflicts -->
+    <!-- 
+    <dependency>
+      <groupId>org.biouno</groupId>
+      <artifactId>uno-choice</artifactId>
+      <version>2.8</version>
+      <optional>true</optional>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.jenkins-ci.plugins</groupId>
+      <artifactId>extended-choice-parameter</artifactId>
+      <version>346.vd87693c5a_86c</version>
+      <optional>true</optional>
+      <scope>provided</scope>
+    </dependency>
+    -->
+
+    <!-- Avoid compile error for @NonNull in some IDEs -->
+    <dependency>
+      <groupId>com.github.spotbugs</groupId>
+      <artifactId>spotbugs-annotations</artifactId>
+      <version>4.8.6</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.jenkins-ci.tools</groupId>
+        <artifactId>maven-hpi-plugin</artifactId>
+        <version>3.48</version>
+        <configuration>
+          <pluginFirstClassLoader>true</pluginFirstClassLoader>
+          <compatibleSinceVersion>1.0.0</compatibleSinceVersion>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

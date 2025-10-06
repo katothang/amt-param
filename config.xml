@@ -1,0 +1,285 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?><flow-definition plugin="workflow-job@1400.v7fd111b_ec82f">
+  <actions/>
+  <description>argocd-demo-prod-multipe-DC-DR</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.plugins.jira.JiraProjectProperty plugin="jira@3.13">
+      <siteName>http://10.1.5.205:8080/</siteName>
+    </hudson.plugins.jira.JiraProjectProperty>
+    <hudson.plugins.buildblocker.BuildBlockerProperty plugin="build-blocker-plugin@166.vc82fc20b_a_ed6">
+      <useBuildBlocker>false</useBuildBlocker>
+      <blockLevel>GLOBAL</blockLevel>
+      <scanQueueFor>DISABLED</scanQueueFor>
+      <blockingJobs/>
+    </hudson.plugins.buildblocker.BuildBlockerProperty>
+    <com.dabsquared.gitlabjenkins.connection.GitLabConnectionProperty plugin="gitlab-plugin@1.8.1">
+      <gitLabConnection>Gitlab</gitLabConnection>
+      <jobCredentialId/>
+      <useAlternativeCredential>false</useAlternativeCredential>
+    </com.dabsquared.gitlabjenkins.connection.GitLabConnectionProperty>
+    <org.jenkinsci.plugins.gitlablogo.GitlabLogoProperty plugin="gitlab-logo@1.1.2">
+      <repositoryName/>
+    </org.jenkinsci.plugins.gitlablogo.GitlabLogoProperty>
+    <org.bstick12.jenkinsci.plugins.leastload.LeastLoadDisabledProperty plugin="leastload@3.0.0">
+      <leastLoadDisabled>false</leastLoadDisabled>
+    </org.bstick12.jenkinsci.plugins.leastload.LeastLoadDisabledProperty>
+    <com.synopsys.arc.jenkinsci.plugins.jobrestrictions.jobs.JobRestrictionProperty plugin="job-restrictions@0.8"/>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <org.biouno.unochoice.ChoiceParameter plugin="uno-choice@2.8.3">
+          <name>Channel</name>
+          <description>C0 - Common
+C01 - Retail
+C02 - Biz
+C03 - PaymentHub</description>
+          <randomName>choice-parameter-9942928246672672</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>return['C01','C02']</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <choiceType>PT_SINGLE_SELECT</choiceType>
+          <filterable>false</filterable>
+          <filterLength>1</filterLength>
+        </org.biouno.unochoice.ChoiceParameter>
+        <org.biouno.unochoice.CascadeChoiceParameter plugin="uno-choice@2.8.3">
+          <name>DeployEnv</name>
+          <description>L03 - PRE-PROD-DC
+L04 - PRE-PROD-DR</description>
+          <randomName>choice-parameter-409776226398939</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>return['L03','L04']</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script>return['error']</script>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <parameters class="linked-hash-map"/>
+          <referencedParameters/>
+          <choiceType>PT_CHECKBOX</choiceType>
+          <filterable>false</filterable>
+          <filterLength>1</filterLength>
+        </org.biouno.unochoice.CascadeChoiceParameter>
+        <org.biouno.unochoice.ChoiceParameter plugin="uno-choice@2.8.3">
+          <name>Options</name>
+          <randomName>choice-parameter-2550636777328565</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>return ["CICD-ARGOCD","CICD-HELM","EDIT","DeployRollBack"]</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <choiceType>PT_SINGLE_SELECT</choiceType>
+          <filterable>false</filterable>
+          <filterLength>1</filterLength>
+        </org.biouno.unochoice.ChoiceParameter>
+        <org.biouno.unochoice.ChoiceParameter plugin="uno-choice@2.8.3">
+          <name>ProjectName</name>
+          <randomName>choice-parameter-2823225274700911</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>return['argocd-demo']</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <choiceType>PT_SINGLE_SELECT</choiceType>
+          <filterable>false</filterable>
+          <filterLength>1</filterLength>
+        </org.biouno.unochoice.ChoiceParameter>
+        <org.biouno.unochoice.DynamicReferenceParameter plugin="uno-choice@2.8.3">
+          <name>ChangeID</name>
+          <randomName>choice-parameter-2822746350192271</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>if (Options == 'CICD-ARGOCD'){
+return '&lt;input name="value" value="" type="text"&gt;'
+} else if (Options == 'CICD-HELM'){
+return '&lt;input name="value" value="" type="text"&gt;'
+}</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <parameters class="linked-hash-map"/>
+          <referencedParameters>Options</referencedParameters>
+          <choiceType>ET_FORMATTED_HTML</choiceType>
+          <omitValueField>false</omitValueField>
+        </org.biouno.unochoice.DynamicReferenceParameter>
+        <org.biouno.unochoice.DynamicReferenceParameter plugin="uno-choice@2.8.3">
+          <name>ChartVersion</name>
+          <randomName>choice-parameter-2550636788864600</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>if (Options.equals("EDIT")){
+  return '&lt;input name="value" value="v1" type="text"&gt;'
+}</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <parameters class="linked-hash-map"/>
+          <referencedParameters>Options</referencedParameters>
+          <choiceType>ET_FORMATTED_HTML</choiceType>
+          <omitValueField>false</omitValueField>
+        </org.biouno.unochoice.DynamicReferenceParameter>
+        <org.biouno.unochoice.CascadeChoiceParameter plugin="uno-choice@2.8.3">
+          <name>ChoicesVersion</name>
+          <randomName>choice-parameter-2550857622936076</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>import groovy.json.JsonSlurper;
+import org.apache.commons.codec.binary.Base64;
+import java.nio.charset.StandardCharsets;
+import jenkins.model.*;
+
+credentialsId = 'helm-package-prod'
+def creds = com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials(
+  com.cloudbees.plugins.credentials.common.StandardUsernameCredentials.class ).find{
+    it.id == credentialsId};
+def user = creds.username
+def password = creds.password
+def item_assets = "${helm_nexus_item_assets}"
+
+// for options
+if (Options == "EDIT" || Options == "DeployRollBack") {
+  // for configs
+  String nexus_search_base_url = "http://devci.mbbank.com.vn:8447/service/rest/v1/search/assets?repository=argocd-helm-prod-${DeployEnv}-${Channel}&amp;name=*-${ProjectName}";
+  def baseUrl = new URL(nexus_search_base_url);
+
+  String auth = user + ":" + password;
+  byte[] encodedAuth = Base64.encodeBase64(auth.getBytes(StandardCharsets.UTF_8));
+  String authHeaderValue = "Basic " + new String(encodedAuth);
+
+  // for fetching
+  def connection = (HttpURLConnection) baseUrl.openConnection();
+  connection.setRequestMethod("GET");
+  connection.addRequestProperty("Authorization", authHeaderValue);
+  connection.connect();
+
+  // for parser
+  def jsonSlurper = new JsonSlurper();
+  def object = jsonSlurper.parseText(connection.inputStream.getText('UTF-8'));
+  object.items.class instanceof List;
+  return object.items.path.sort();
+}</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <parameters class="linked-hash-map"/>
+          <referencedParameters>Options,ProjectName,DeployEnv,Channel</referencedParameters>
+          <choiceType>PT_SINGLE_SELECT</choiceType>
+          <filterable>false</filterable>
+          <filterLength>1</filterLength>
+        </org.biouno.unochoice.CascadeChoiceParameter>
+        <org.biouno.unochoice.DynamicReferenceParameter plugin="uno-choice@2.8.3">
+          <name>Description</name>
+          <randomName>choice-parameter-2833748593543861</randomName>
+          <visibleItemCount>1</visibleItemCount>
+          <script class="org.biouno.unochoice.model.GroovyScript">
+            <secureScript plugin="script-security@1341.va_2819b_414686">
+              <script>if (Options.equals("EDIT")){
+  return '&lt;input name="value" value="" type="text"&gt;'
+}
+</script>
+              <sandbox>false</sandbox>
+            </secureScript>
+            <secureFallbackScript plugin="script-security@1341.va_2819b_414686">
+              <script/>
+              <sandbox>false</sandbox>
+            </secureFallbackScript>
+          </script>
+          <projectName>argocd-demo</projectName>
+          <projectFullName>DEMO-AMT/ACTIVE-ACTIVE/argocd-demo</projectFullName>
+          <parameters class="linked-hash-map"/>
+          <referencedParameters>Options</referencedParameters>
+          <choiceType>ET_FORMATTED_HTML</choiceType>
+          <omitValueField>false</omitValueField>
+        </org.biouno.unochoice.DynamicReferenceParameter>
+        <hudson.model.StringParameterDefinition>
+          <name>Reason</name>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+    <hudson.plugins.throttleconcurrents.ThrottleJobProperty plugin="throttle-concurrents@2.14">
+      <maxConcurrentPerNode>0</maxConcurrentPerNode>
+      <maxConcurrentTotal>0</maxConcurrentTotal>
+      <categories class="java.util.concurrent.CopyOnWriteArrayList"/>
+      <throttleEnabled>false</throttleEnabled>
+      <throttleOption>project</throttleOption>
+      <limitOneJobWithMatchingParams>false</limitOneJobWithMatchingParams>
+      <paramsToUseForLimit/>
+    </hudson.plugins.throttleconcurrents.ThrottleJobProperty>
+    
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps@3903.v48a_8836749e9">
+    <scm class="hudson.plugins.git.GitSCM" plugin="git@5.2.2">
+      <configVersion>2</configVersion>
+      <userRemoteConfigs>
+        <hudson.plugins.git.UserRemoteConfig>
+          <url>https://gitlab.mbbank.com.vn/devconfig/6.apm/apm-agent-react.git</url>
+          <credentialsId>git-live</credentialsId>
+        </hudson.plugins.git.UserRemoteConfig>
+      </userRemoteConfigs>
+      <branches>
+        <hudson.plugins.git.BranchSpec>
+          <name>dc-dr</name>
+        </hudson.plugins.git.BranchSpec>
+      </branches>
+      <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+      <submoduleCfg class="empty-list"/>
+      <extensions/>
+    </scm>
+    <scriptPath>cicd/pilot/Jenkinsfile_dcdr.common</scriptPath>
+    <lightweight>true</lightweight>
+  </definition>
+  <triggers/>
+  <disabled>false</disabled>
+</flow-definition>
