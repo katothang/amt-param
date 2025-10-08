@@ -1,0 +1,21 @@
+Manifest-Version: 1.0
+Group-Id: io.kanbanai
+Artifact-Id: amt-param
+Short-Name: amt-param
+Long-Name: amt-param
+Url: https://example.com/params-view
+Plugin-Version: 1.0.2
+Hudson-Version: 2.414.3
+Jenkins-Version: 2.414.3
+PluginFirstClassLoader: true
+Plugin-Developers: 
+Plugin-ScmConnection: scm:git:https://github.com/jenkinsci/plugin-pom.gi
+ t/amt-param
+Plugin-ScmTag: plugin-4.80
+Plugin-ScmUrl: https://github.com/jenkinsci/plugin-pom/amt-param
+Plugin-GitHash: 3dcfd211cc06ed8f1d21869ee170d3af5e962998
+Implementation-Build: 3dcfd211cc06ed8f1d21869ee170d3af5e962998
+Libraries: /Users/kuthang/Desktop/code/amt-param/src/main/resources,/Use
+ rs/kuthang/Desktop/code/amt-param/target/classes
+Resource-Path: /Users/kuthang/Desktop/code/amt-param/src/main/webapp
+
