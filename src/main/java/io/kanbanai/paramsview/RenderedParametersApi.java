@@ -52,7 +52,7 @@ public class RenderedParametersApi implements RootAction {
      * REST API endpoint để lấy thông tin parameters của một job
      * 
      * Cách sử dụng:
-     * GET /amt-param/get?job=jobName&params=param1:value1,param2:value2
+     * GET /amt-param/get?job=https://jenkins.thangnotes.dev/job/amt_clone1/&params=param1:value1,param2:value2
      * 
      * @param req StaplerRequest chứa parameters
      * @param rsp StaplerResponse để trả về kết quả JSON
@@ -60,10 +60,17 @@ public class RenderedParametersApi implements RootAction {
      * @throws ServletException Nếu có lỗi servlet
      */
     public void doGet(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
-        // Lấy tên job từ query parameter
-        String jobName = req.getParameter("job");
+        // Lấy job URL từ query parameter
+        String jobUrl = req.getParameter("job");
+        if (jobUrl == null || jobUrl.isEmpty()) {
+            rsp.sendError(400, "Job parameter is required (e.g., https://jenkins.example.com/job/jobName/)");
+            return;
+        }
+
+        // Parse job name từ URL
+        String jobName = extractJobNameFromUrl(jobUrl);
         if (jobName == null || jobName.isEmpty()) {
-            rsp.sendError(400, "Job parameter is required");
+            rsp.sendError(400, "Invalid job URL format. Expected format: https://jenkins.example.com/job/jobName/");
             return;
         }
 
@@ -93,6 +100,50 @@ public class RenderedParametersApi implements RootAction {
         // Trả về JSON response
         rsp.setContentType("application/json;charset=UTF-8");
         rsp.getWriter().write(info.toJson());
+    }
+
+    /**
+     * Extract job name từ Jenkins URL
+     * Format: https://jenkins.thangnotes.dev/job/amt_clone1/ -> amt_clone1
+     * Format: https://jenkins.thangnotes.dev/job/folder/job/jobName/ -> folder/jobName
+     * 
+     * @param jobUrl Jenkins job URL
+     * @return Job name hoặc null nếu URL không hợp lệ
+     */
+    private String extractJobNameFromUrl(String jobUrl) {
+        if (jobUrl == null || jobUrl.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Remove trailing slash
+            String url = jobUrl.trim();
+            if (url.endsWith("/")) {
+                url = url.substring(0, url.length() - 1);
+            }
+            
+            // Parse job name từ URL pattern: .../job/name/job/name/...
+            // Ví dụ: https://jenkins.example.com/job/folder/job/jobName -> folder/jobName
+            String[] parts = url.split("/job/");
+            if (parts.length < 2) {
+                return null;
+            }
+            
+            // Lấy tất cả các phần sau /job/ và join bằng /
+            StringBuilder jobName = new StringBuilder();
+            for (int i = 1; i < parts.length; i++) {
+                if (i > 1) {
+                    jobName.append("/");
+                }
+                jobName.append(parts[i]);
+            }
+            
+            return jobName.toString();
+            
+        } catch (Exception e) {
+            System.err.println("Lỗi khi parse job URL: " + jobUrl + " - " + e.getMessage());
+            return null;
+        }
     }
 
     /**
