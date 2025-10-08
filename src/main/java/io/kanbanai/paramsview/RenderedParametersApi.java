@@ -246,10 +246,10 @@ public class RenderedParametersApi implements RootAction {
             // String Parameter: input text đơn giản
             param.inputType = "text";
         } else {
-            // Xử lý Active Choices Plugin parameters (dynamic parameters)
-            param.choices = getRenderedChoices(def, job, currentValues);
+            // Xử lý Active Choices Plugin parameters (dynamic parameters) thông qua Jenkins API động
+            param.choices = getActiveChoicesViaJenkinsAPI(def, currentValues);
             param.isDynamic = true;
-            param.dependencies = getDependencies(def);
+            param.dependencies = getReferencedParametersViaJenkinsAPI(def);
             
             // Xác định input type dựa trên class name
             if (className.contains("ChoiceParameter")) {
@@ -267,239 +267,141 @@ public class RenderedParametersApi implements RootAction {
     }
 
     /**
-     * Lấy các rendered choices cho dynamic parameter
-     * Xử lý các loại dynamic parameter từ Active Choices Plugin
+     * Lấy các choices từ Active Choices parameter thông qua Jenkins API động
+     * Sử dụng reflection để gọi các method public của Active Choices plugin
+     * Phương pháp này KHÔNG cần import class của Active Choices, hoạt động hoàn toàn qua reflection
      * 
      * @param def ParameterDefinition
-     * @param job Job hiện tại
      * @param currentValues Map các giá trị parameter hiện tại (cho cascade parameters)
      * @return List các choices đã được render
      */
-    private List<String> getRenderedChoices(ParameterDefinition def, Job<?, ?> job, Map<String, String> currentValues) {
+    private List<String> getActiveChoicesViaJenkinsAPI(ParameterDefinition def, Map<String, String> currentValues) {
         List<String> choices = new ArrayList<>();
-        String className = def.getClass().getName();
         
         try {
-            // Chỉ xử lý nếu là Active Choices plugin parameter
-            if (className.contains("org.biouno.unochoice")) {
-                // Gọi method render Active Choices với Jenkins API
-                choices = renderActiveChoicesParameter(def, job, currentValues);
+            // Bước 1: Lấy Script object từ parameter thông qua reflection
+            // Tất cả Active Choices parameters đều có method getScript()
+            java.lang.reflect.Method getScriptMethod = def.getClass().getMethod("getScript");
+            Object script = getScriptMethod.invoke(def);
+            
+            if (script != null) {
+                // Bước 2: Gọi method eval() của Script với parameters
+                // Script.eval(Map<String, String> parameters) trả về kết quả thực thi script
+                java.lang.reflect.Method evalMethod = script.getClass().getMethod("eval", Map.class);
+                Object result = evalMethod.invoke(script, currentValues);
+                
+                // Bước 3: Normalize kết quả về List<String>
+                choices = normalizeChoicesResult(result);
             }
+            
         } catch (Exception e) {
-            System.err.println("Lỗi khi render choices cho parameter: " + def.getName() + " - " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("Lỗi khi lấy Active Choices values qua Jenkins API cho parameter: " + def.getName() + " - " + e.getMessage());
+            // Fallback: thử cách khác nếu không lấy được qua Script
+            choices = getActiveChoicesFallback(def, currentValues);
         }
         
         return choices;
     }
 
     /**
-     * Render Active Choices parameter giống như màn "Build with Parameters" của Jenkins
-     * Phương pháp này sử dụng Jenkins API chính thức thay vì regex để đảm bảo tính chính xác
-     * 
-     * @param def ParameterDefinition cần render
-     * @param job Job chứa parameter
-     * @param currentValues Map chứa các giá trị parameter hiện tại (dùng cho cascade parameters)
-     * @return List các choices đã được render
-     */
-    private List<String> renderActiveChoicesParameter(ParameterDefinition def, Job<?, ?> job, Map<String, String> currentValues) {
-        List<String> choices = new ArrayList<>();
-        
-        try {
-            // Bước 1: Lấy ChoiceProvider từ parameter definition
-            // ChoiceProvider là object chứa logic để tạo ra các choices động
-            Object choiceProvider = getChoiceProvider(def);
-            if (choiceProvider != null) {
-                choices = renderChoiceProviderWithGroovy(choiceProvider, job, currentValues);
-            }
-            
-            // Bước 2: Nếu không có ChoiceProvider, thử lấy choices trực tiếp từ parameter
-            if (choices.isEmpty()) {
-                choices = getChoicesDirectly(def, job, currentValues);
-            }
-            
-            // Bước 3: Fallback - lấy static choices nếu không có dynamic choices
-            if (choices.isEmpty()) {
-                try {
-                    java.lang.reflect.Method getChoicesMethod = def.getClass().getMethod("getChoices");
-                    Object result = getChoicesMethod.invoke(def);
-                    choices = normalizeChoicesResult(result);
-                } catch (Exception e) {
-                    // Không có phương thức getChoices
-                }
-            }
-            
-        } catch (Exception e) {
-            System.err.println("Lỗi khi render Active Choices parameter: " + def.getName() + " - " + e.getMessage());
-            e.printStackTrace();
-        }
-        
-        return choices;
-    }
-
-    /**
-     * Lấy ChoiceProvider từ parameter definition
-     * ChoiceProvider là object quản lý việc tạo ra các choices động trong Active Choices plugin
+     * Fallback method để lấy choices khi method chính thất bại
+     * Thử nhiều cách khác nhau để lấy choices từ Active Choices parameter
      * 
      * @param def ParameterDefinition
-     * @return ChoiceProvider object hoặc null nếu không tìm thấy
-     */
-    private Object getChoiceProvider(ParameterDefinition def) {
-        try {
-            java.lang.reflect.Method getChoiceProviderMethod = def.getClass().getMethod("getChoiceProvider");
-            return getChoiceProviderMethod.invoke(def);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * Render ChoiceProvider bằng cách thực thi Groovy script với Jenkins API
-     * Phương pháp này KHÔNG dùng regex để parse, thay vào đó gọi trực tiếp các method của Jenkins
-     * 
-     * @param choiceProvider ChoiceProvider object từ Active Choices plugin
-     * @param job Job hiện tại
-     * @param currentValues Map các giá trị parameter hiện tại (cho cascade parameters)
-     * @return List các choices đã được render
-     */
-    private List<String> renderChoiceProviderWithGroovy(Object choiceProvider, Job<?, ?> job, Map<String, String> currentValues) {
-        List<String> choices = new ArrayList<>();
-        
-        try {
-            Class<?> providerClass = choiceProvider.getClass();
-            
-            // Bước 1: Thử gọi method getChoicesForUI - đây là method mà Jenkins UI sử dụng
-            // Method này nhận Map<String, String> chứa các parameter values hiện tại
-            try {
-                java.lang.reflect.Method getChoicesForUIMethod = providerClass.getMethod("getChoicesForUI", Map.class);
-                Object result = getChoicesForUIMethod.invoke(choiceProvider, currentValues);
-                choices = normalizeChoicesResult(result);
-                if (!choices.isEmpty()) {
-                    return choices;
-                }
-            } catch (NoSuchMethodException e) {
-                // Method không tồn tại, thử cách khác
-            }
-            
-            // Bước 2: Thử gọi method getValues với Job và Map parameters
-            // Đây là cách Active Choices plugin v2.x render choices
-            try {
-                java.lang.reflect.Method getValuesMethod = providerClass.getMethod("getValues", Job.class, Map.class);
-                Object result = getValuesMethod.invoke(choiceProvider, job, currentValues);
-                choices = normalizeChoicesResult(result);
-                if (!choices.isEmpty()) {
-                    return choices;
-                }
-            } catch (NoSuchMethodException e) {
-                // Method không tồn tại, thử cách khác
-            }
-            
-            // Bước 3: Thử gọi method getChoices với Map parameters
-            // Một số version của Active Choices dùng method này
-            try {
-                java.lang.reflect.Method getChoicesMethod = providerClass.getMethod("getChoices", Map.class);
-                Object result = getChoicesMethod.invoke(choiceProvider, currentValues);
-                choices = normalizeChoicesResult(result);
-                if (!choices.isEmpty()) {
-                    return choices;
-                }
-            } catch (NoSuchMethodException e) {
-                // Method không tồn tại, thử cách khác
-            }
-            
-            // Bước 4: Thử gọi method getChoices không có parameters
-            // Fallback cho các parameter không phụ thuộc vào parameter khác
-            try {
-                java.lang.reflect.Method getChoicesMethod = providerClass.getMethod("getChoices");
-                Object result = getChoicesMethod.invoke(choiceProvider);
-                choices = normalizeChoicesResult(result);
-                if (!choices.isEmpty()) {
-                    return choices;
-                }
-            } catch (NoSuchMethodException e) {
-                // Method không tồn tại
-            }
-            
-        } catch (Exception e) {
-            System.err.println("Lỗi khi render choice provider với Groovy: " + e.getMessage());
-            e.printStackTrace();
-        }
-        
-        return choices;
-    }
-
-    /**
-     * Lấy choices trực tiếp từ parameter definition bằng Jenkins API
-     * Không sử dụng regex hay parse script, mà gọi trực tiếp các method của Jenkins
-     * 
-     * @param def ParameterDefinition
-     * @param job Job hiện tại
      * @param currentValues Map các giá trị parameter hiện tại
      * @return List các choices
      */
-    private List<String> getChoicesDirectly(ParameterDefinition def, Job<?, ?> job, Map<String, String> currentValues) {
+    private List<String> getActiveChoicesFallback(ParameterDefinition def, Map<String, String> currentValues) {
         List<String> choices = new ArrayList<>();
         
         try {
-            Class<?> defClass = def.getClass();
-            
-            // Bước 1: Thử gọi getChoices với Job và Map (cho Dynamic Reference Parameter)
+            // Thử 1: Gọi method getChoices(Map) - dành cho CascadeChoiceParameter
             try {
-                java.lang.reflect.Method getChoicesMethod = defClass.getMethod("getChoices", Job.class, Map.class);
-                Object result = getChoicesMethod.invoke(def, job, currentValues);
-                choices = normalizeChoicesResult(result);
-                if (!choices.isEmpty()) {
-                    return choices;
-                }
-            } catch (NoSuchMethodException e) {
-                // Method không tồn tại
-            }
-            
-            // Bước 2: Thử gọi getChoices với Map parameters (cho Cascade Choice Parameter)
-            try {
-                java.lang.reflect.Method getChoicesMethod = defClass.getMethod("getChoices", Map.class);
+                java.lang.reflect.Method getChoicesMethod = def.getClass().getMethod("getChoices", Map.class);
                 Object result = getChoicesMethod.invoke(def, currentValues);
                 choices = normalizeChoicesResult(result);
                 if (!choices.isEmpty()) {
                     return choices;
                 }
             } catch (NoSuchMethodException e) {
+                // Method không tồn tại, thử cách khác
+            }
+            
+            // Thử 2: Gọi method getChoices() không tham số
+            try {
+                java.lang.reflect.Method getChoicesMethod = def.getClass().getMethod("getChoices");
+                Object result = getChoicesMethod.invoke(def);
+                choices = normalizeChoicesResult(result);
+                if (!choices.isEmpty()) {
+                    return choices;
+                }
+            } catch (NoSuchMethodException e) {
                 // Method không tồn tại
             }
             
-            // Bước 3: Thử dùng Jenkins Descriptor để render parameter
-            // Đây là cách chính xác nhất vì giống với cách Jenkins UI render
+            // Thử 3: Gọi method getChoicesForUI() - UI method của Active Choices
             try {
-                Descriptor<?> descriptor = def.getDescriptor();
-                if (descriptor != null) {
-                    // Tạo một StaplerRequest giả để simulate môi trường render của Jenkins
-                    // Note: Cách này phức tạp và có thể cần điều chỉnh tùy theo version Jenkins
-                    java.lang.reflect.Method fillMethod = descriptor.getClass().getMethod("doFillValueItems", 
-                        hudson.model.Item.class, String.class);
-                    Object result = fillMethod.invoke(descriptor, job, "");
-                    choices = normalizeChoicesResult(result);
-                    if (!choices.isEmpty()) {
-                        return choices;
-                    }
-                }
-            } catch (Exception e) {
-                // Descriptor không hỗ trợ hoặc method không tồn tại
+                java.lang.reflect.Method getChoicesForUIMethod = def.getClass().getMethod("getChoicesForUI");
+                Object result = getChoicesForUIMethod.invoke(def);
+                choices = normalizeChoicesResult(result);
+            } catch (NoSuchMethodException e) {
+                // Method không tồn tại
             }
             
         } catch (Exception e) {
-            System.err.println("Lỗi khi lấy choices trực tiếp: " + e.getMessage());
+            System.err.println("Lỗi fallback khi lấy Active Choices values: " + e.getMessage());
         }
         
         return choices;
     }
 
     /**
+     * Lấy referenced parameters (dependencies) qua Jenkins API động
+     * Sử dụng reflection để gọi method getReferencedParameters()
+     * 
+     * @param def ParameterDefinition
+     * @return List tên các parameters được reference
+     */
+    private List<String> getReferencedParametersViaJenkinsAPI(ParameterDefinition def) {
+        List<String> dependencies = new ArrayList<>();
+        
+        try {
+            // Active Choices Cascade và Dynamic Reference parameters có method getReferencedParameters()
+            java.lang.reflect.Method getReferencedParametersMethod = def.getClass().getMethod("getReferencedParameters");
+            Object result = getReferencedParametersMethod.invoke(def);
+            
+            if (result != null && result instanceof String) {
+                // Kết quả là string dạng "param1,param2,param3"
+                String referencedParams = (String) result;
+                if (!referencedParams.isEmpty()) {
+                    String[] params = referencedParams.split(",");
+                    for (String param : params) {
+                        String trimmed = param.trim();
+                        if (!trimmed.isEmpty()) {
+                            dependencies.add(trimmed);
+                        }
+                    }
+                }
+            }
+        } catch (NoSuchMethodException e) {
+            // Parameter không có dependencies (không phải Cascade/Dynamic Reference type)
+        } catch (Exception e) {
+            System.err.println("Lỗi khi lấy referenced parameters qua Jenkins API: " + e.getMessage());
+        }
+        
+        return dependencies;
+    }
+
+    /**
      * Lấy danh sách các parameter mà parameter hiện tại phụ thuộc vào (dependencies)
      * Dùng cho Cascade Choice Parameter hoặc Dynamic Reference Parameter
+     * DEPRECATED: Sử dụng getReferencedParametersViaJenkinsAPI() thay thế
      * 
      * @param def ParameterDefinition
      * @return List tên các parameter mà parameter này phụ thuộc vào
+     * @deprecated Use {@link #getReferencedParametersViaJenkinsAPI(ParameterDefinition)} instead
      */
+    @Deprecated
     private List<String> getDependencies(ParameterDefinition def) {
         List<String> dependencies = new ArrayList<>();
         
