@@ -7,6 +7,13 @@ import jenkins.model.Jenkins;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 
+// Active Choices imports
+import org.biouno.unochoice.AbstractScriptableParameter;
+import org.biouno.unochoice.ChoiceParameter;
+import org.biouno.unochoice.CascadeChoiceParameter;
+import org.biouno.unochoice.DynamicReferenceParameter;
+import org.biouno.unochoice.model.Script;
+
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.*;
@@ -19,11 +26,11 @@ import java.util.*;
  * 
  * Các tính năng chính:
  * - Lấy tất cả parameters của job (built-in và Active Choices)
- * - Render dynamic parameters với giá trị thực tế (không dùng regex)
+ * - Render dynamic parameters với giá trị thực tế (sử dụng thư viện Active Choices trực tiếp)
  * - Xử lý cascade parameters (parameters phụ thuộc vào nhau)
  * - Hỗ trợ tất cả loại parameter: String, Boolean, Choice, Text, Password, Active Choices, etc.
  * 
- * Sử dụng Jenkins API chính thức thay vì regex để đảm bảo tính chính xác 100%
+ * Sử dụng thư viện Active Choices chính thức để đảm bảo tính chính xác 100%
  * 
  * @author KanbanAI
  * @since 1.0
@@ -267,9 +274,7 @@ public class RenderedParametersApi implements RootAction {
     }
 
     /**
-     * Lấy các choices từ Active Choices parameter thông qua Jenkins API động
-     * Sử dụng reflection để gọi các method public của Active Choices plugin
-     * Phương pháp này KHÔNG cần import class của Active Choices, hoạt động hoàn toàn qua reflection
+     * Lấy các choices từ Active Choices parameter sử dụng thư viện trực tiếp
      * 
      * @param def ParameterDefinition
      * @param currentValues Map các giá trị parameter hiện tại (cho cascade parameters)
@@ -279,23 +284,23 @@ public class RenderedParametersApi implements RootAction {
         List<String> choices = new ArrayList<>();
         
         try {
-            // Bước 1: Lấy Script object từ parameter thông qua reflection
-            // Tất cả Active Choices parameters đều có method getScript()
-            java.lang.reflect.Method getScriptMethod = def.getClass().getMethod("getScript");
-            Object script = getScriptMethod.invoke(def);
-            
-            if (script != null) {
-                // Bước 2: Gọi method eval() của Script với parameters
-                // Script.eval(Map<String, String> parameters) trả về kết quả thực thi script
-                java.lang.reflect.Method evalMethod = script.getClass().getMethod("eval", Map.class);
-                Object result = evalMethod.invoke(script, currentValues);
+            // Kiểm tra xem parameter có phải là Active Choices type không
+            if (def instanceof AbstractScriptableParameter) {
+                AbstractScriptableParameter scriptableParam = (AbstractScriptableParameter) def;
+                Script script = scriptableParam.getScript();
                 
-                // Bước 3: Normalize kết quả về List<String>
-                choices = normalizeChoicesResult(result);
+                if (script != null) {
+                    // Gọi script.eval() trực tiếp từ thư viện
+                    // Script có thể trả về nhiều kiểu: List, Map, Array, String, ListBoxModel
+                    Object scriptResult = script.eval(currentValues);
+                    
+                    // Normalize kết quả về List<String>
+                    choices = normalizeChoicesResult(scriptResult);
+                }
             }
             
         } catch (Exception e) {
-            System.err.println("Lỗi khi lấy Active Choices values qua Jenkins API cho parameter: " + def.getName() + " - " + e.getMessage());
+            System.err.println("Lỗi khi lấy Active Choices values cho parameter: " + def.getName() + " - " + e.getMessage());
             // Fallback: thử cách khác nếu không lấy được qua Script
             choices = getActiveChoicesFallback(def, currentValues);
         }
@@ -356,8 +361,7 @@ public class RenderedParametersApi implements RootAction {
     }
 
     /**
-     * Lấy referenced parameters (dependencies) qua Jenkins API động
-     * Sử dụng reflection để gọi method getReferencedParameters()
+     * Lấy referenced parameters (dependencies) sử dụng thư viện trực tiếp
      * 
      * @param def ParameterDefinition
      * @return List tên các parameters được reference
@@ -366,14 +370,25 @@ public class RenderedParametersApi implements RootAction {
         List<String> dependencies = new ArrayList<>();
         
         try {
-            // Active Choices Cascade và Dynamic Reference parameters có method getReferencedParameters()
-            java.lang.reflect.Method getReferencedParametersMethod = def.getClass().getMethod("getReferencedParameters");
-            Object result = getReferencedParametersMethod.invoke(def);
-            
-            if (result != null && result instanceof String) {
-                // Kết quả là string dạng "param1,param2,param3"
-                String referencedParams = (String) result;
-                if (!referencedParams.isEmpty()) {
+            // Kiểm tra xem parameter có phải là Cascade hoặc Dynamic Reference type
+            if (def instanceof CascadeChoiceParameter) {
+                CascadeChoiceParameter cascadeParam = (CascadeChoiceParameter) def;
+                String referencedParams = cascadeParam.getReferencedParameters();
+                
+                if (referencedParams != null && !referencedParams.isEmpty()) {
+                    String[] params = referencedParams.split(",");
+                    for (String param : params) {
+                        String trimmed = param.trim();
+                        if (!trimmed.isEmpty()) {
+                            dependencies.add(trimmed);
+                        }
+                    }
+                }
+            } else if (def instanceof DynamicReferenceParameter) {
+                DynamicReferenceParameter dynamicParam = (DynamicReferenceParameter) def;
+                String referencedParams = dynamicParam.getReferencedParameters();
+                
+                if (referencedParams != null && !referencedParams.isEmpty()) {
                     String[] params = referencedParams.split(",");
                     for (String param : params) {
                         String trimmed = param.trim();
@@ -383,10 +398,8 @@ public class RenderedParametersApi implements RootAction {
                     }
                 }
             }
-        } catch (NoSuchMethodException e) {
-            // Parameter không có dependencies (không phải Cascade/Dynamic Reference type)
         } catch (Exception e) {
-            System.err.println("Lỗi khi lấy referenced parameters qua Jenkins API: " + e.getMessage());
+            System.err.println("Lỗi khi lấy referenced parameters: " + e.getMessage());
         }
         
         return dependencies;
@@ -472,111 +485,162 @@ public class RenderedParametersApi implements RootAction {
      * Jenkins API có thể trả về nhiều kiểu dữ liệu: List, Map, ListBoxModel, Array, String...
      * Method này xử lý tất cả các trường hợp để đảm bảo tương thích
      * 
-     * @param result Object kết quả từ Jenkins API
+     * @param scriptResult Kết quả từ Groovy script (có thể là nhiều kiểu)
      * @return List<String> đã được chuẩn hóa
      */
-    private List<String> normalizeChoicesResult(Object result) {
-        List<String> choices = new ArrayList<>();
-        if (result == null) return choices;
+    private List<String> normalizeChoicesResult(Object scriptResult) {
+        if (scriptResult == null) {
+            return new ArrayList<>();
+        }
         
-        try {
-            // Trường hợp 1: Đã là List - lấy trực tiếp
-            if (result instanceof java.util.List) {
-                for (Object item : (java.util.List<?>) result) {
-                    if (item != null) {
-                        choices.add(item.toString());
-                    }
-                }
-            } 
-            // Trường hợp 2: Là Map - lấy values hoặc keys
-            else if (result instanceof java.util.Map) {
-                java.util.Map<?, ?> map = (java.util.Map<?, ?>) result;
-                // Ưu tiên lấy values, nếu không có thì lấy keys
-                if (!map.isEmpty()) {
-                    for (Object value : map.values()) {
-                        if (value != null) {
-                            choices.add(value.toString());
-                        }
-                    }
-                    // Nếu values toàn null, thử lấy keys
-                    if (choices.isEmpty()) {
-                        for (Object key : map.keySet()) {
-                            if (key != null) {
-                                choices.add(key.toString());
-                            }
-                        }
-                    }
-                }
-            } 
-            // Trường hợp 3: Là ListBoxModel (Jenkins UI component)
-            else if (result.getClass().getName().contains("ListBoxModel")) {
-                try {
-                    // ListBoxModel có iterator để duyệt qua các Option
-                    java.lang.reflect.Method iteratorMethod = result.getClass().getMethod("iterator");
-                    java.util.Iterator<?> iterator = (java.util.Iterator<?>) iteratorMethod.invoke(result);
-                    while (iterator.hasNext()) {
-                        Object option = iterator.next();
-                        // Mỗi Option có method name() và value()
-                        try {
-                            java.lang.reflect.Method getNameMethod = option.getClass().getMethod("name");
-                            Object name = getNameMethod.invoke(option);
-                            if (name != null) {
-                                choices.add(name.toString());
-                            }
-                        } catch (Exception e) {
-                            // Nếu không có name, thử lấy value
-                            try {
-                                java.lang.reflect.Method getValueMethod = option.getClass().getMethod("value");
-                                Object value = getValueMethod.invoke(option);
-                                if (value != null) {
-                                    choices.add(value.toString());
-                                }
-                            } catch (Exception ex) {
-                                // Không lấy được, skip
-                            }
-                        }
-                    }
-                } catch (Exception e) {
-                    System.err.println("Lỗi khi xử lý ListBoxModel: " + e.getMessage());
+        // Xử lý theo từng kiểu cụ thể
+        if (scriptResult instanceof List) {
+            return normalizeFromList((List<?>) scriptResult);
+        } else if (scriptResult instanceof Map) {
+            return normalizeFromMap((Map<?, ?>) scriptResult);
+        } else if (scriptResult instanceof Collection) {
+            return normalizeFromCollection((Collection<?>) scriptResult);
+        } else if (scriptResult.getClass().isArray()) {
+            return normalizeFromArray(scriptResult);
+        } else if (scriptResult.getClass().getName().contains("ListBoxModel")) {
+            return normalizeFromListBoxModel(scriptResult);
+        } else if (scriptResult instanceof String) {
+            // Nếu là String đơn, wrap thành List
+            List<String> result = new ArrayList<>();
+            result.add((String) scriptResult);
+            return result;
+        } else {
+            // Fallback: convert toString()
+            List<String> result = new ArrayList<>();
+            result.add(scriptResult.toString());
+            return result;
+        }
+    }
+    
+    /**
+     * Chuẩn hóa từ List
+     */
+    private List<String> normalizeFromList(List<?> list) {
+        List<String> choices = new ArrayList<>();
+        for (Object item : list) {
+            if (item != null) {
+                choices.add(item.toString());
+            }
+        }
+        return choices;
+    }
+    
+    /**
+     * Chuẩn hóa từ Map - lấy values, nếu không có thì lấy keys
+     */
+    private List<String> normalizeFromMap(Map<?, ?> map) {
+        List<String> choices = new ArrayList<>();
+        if (map.isEmpty()) {
+            return choices;
+        }
+        
+        // Ưu tiên lấy values
+        for (Object value : map.values()) {
+            if (value != null) {
+                choices.add(value.toString());
+            }
+        }
+        
+        // Nếu values toàn null, thử lấy keys
+        if (choices.isEmpty()) {
+            for (Object key : map.keySet()) {
+                if (key != null) {
+                    choices.add(key.toString());
                 }
             }
-            // Trường hợp 4: Là Array
-            else if (result.getClass().isArray()) {
-                Object[] arr = (Object[]) result;
-                for (Object item : arr) {
-                    if (item != null) {
-                        choices.add(item.toString());
-                    }
-                }
-            }
-            // Trường hợp 5: Là Set hoặc Collection khác
-            else if (result instanceof java.util.Collection) {
-                for (Object item : (java.util.Collection<?>) result) {
-                    if (item != null) {
-                        choices.add(item.toString());
-                    }
-                }
-            }
-            // Trường hợp 6: Là String đơn lẻ
-            else if (result instanceof String) {
-                String str = (String) result;
-                if (!str.isEmpty()) {
-                    choices.add(str);
-                }
-            }
-            // Trường hợp 7: Các object khác - convert toString()
-            else {
-                String str = result.toString();
-                if (str != null && !str.isEmpty()) {
-                    choices.add(str);
-                }
-            }
-        } catch (Exception e) {
-            System.err.println("Lỗi khi chuẩn hóa choices result: " + e.getMessage());
-            e.printStackTrace();
         }
         
         return choices;
+    }
+    
+    /**
+     * Chuẩn hóa từ Collection khác (Set, etc.)
+     */
+    private List<String> normalizeFromCollection(Collection<?> collection) {
+        List<String> choices = new ArrayList<>();
+        for (Object item : collection) {
+            if (item != null) {
+                choices.add(item.toString());
+            }
+        }
+        return choices;
+    }
+    
+    /**
+     * Chuẩn hóa từ Array
+     */
+    private List<String> normalizeFromArray(Object arrayResult) {
+        List<String> choices = new ArrayList<>();
+        int length = java.lang.reflect.Array.getLength(arrayResult);
+        for (int i = 0; i < length; i++) {
+            Object item = java.lang.reflect.Array.get(arrayResult, i);
+            if (item != null) {
+                choices.add(item.toString());
+            }
+        }
+        return choices;
+    }
+    
+    /**
+     * Chuẩn hóa từ Jenkins ListBoxModel
+     * ListBoxModel là UI component của Jenkins chứa các Option
+     */
+    private List<String> normalizeFromListBoxModel(Object listBoxModel) {
+        List<String> choices = new ArrayList<>();
+        
+        try {
+            // ListBoxModel có iterator để duyệt qua các Option
+            java.lang.reflect.Method iteratorMethod = listBoxModel.getClass().getMethod("iterator");
+            java.util.Iterator<?> iterator = (java.util.Iterator<?>) iteratorMethod.invoke(listBoxModel);
+            
+            while (iterator.hasNext()) {
+                Object option = iterator.next();
+                String optionValue = extractOptionValue(option);
+                if (optionValue != null) {
+                    choices.add(optionValue);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Lỗi khi xử lý ListBoxModel: " + e.getMessage());
+        }
+        
+        return choices;
+    }
+    
+    /**
+     * Lấy giá trị từ một Option của ListBoxModel
+     * Option có method name() và value()
+     */
+    private String extractOptionValue(Object option) {
+        try {
+            // Thử lấy name() trước
+            java.lang.reflect.Method getNameMethod = option.getClass().getMethod("name");
+            Object name = getNameMethod.invoke(option);
+            if (name != null) {
+                return name.toString();
+            }
+        } catch (Exception e) {
+            // Không có name(), thử value()
+        }
+        
+        try {
+            // Thử lấy value()
+            java.lang.reflect.Method getValueMethod = option.getClass().getMethod("value");
+            Object value = getValueMethod.invoke(option);
+            if (value != null) {
+                return value.toString();
+            }
+        } catch (Exception e) {
+            // Không có value()
+        }
+        
+        // Fallback: toString()
+        return option.toString();
     }
 
     /**
