@@ -1,7 +1,7 @@
 # AMT Param - Jenkins Plugin để lấy thông tin Parameters
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![Jenkins](https://img.shields.io/badge/jenkins-%3E%3D2.387-blue)]()
+[![Jenkins](https://img.shields.io/badge/jenkins-%3E%3D2.414-blue)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
 
 Plugin Jenkins cung cấp REST API để lấy thông tin đầy đủ về parameters của một job, **giống hệt màn "Build with Parameters"** của Jenkins UI.
@@ -12,6 +12,7 @@ Plugin Jenkins cung cấp REST API để lấy thông tin đầy đủ về para
 - ✅ **Không dùng regex** - Sử dụng Jenkins API chính thức thay vì regex parsing
 - ✅ **Hỗ trợ đầy đủ** - Tất cả loại parameters (built-in và Active Choices)
 - ✅ **Cascade parameters** - Xử lý đúng parameters phụ thuộc vào nhau
+- ✅ **Simple URL** - URL ngắn gọn, dễ sử dụng (v1.0.3+)
 - ✅ **Comment tiếng Việt** - Code dễ hiểu, dễ maintain
 
 ## 🚀 Cài đặt
@@ -23,11 +24,10 @@ Plugin Jenkins cung cấp REST API để lấy thông tin đầy đủ về para
 git clone https://github.com/katothang/amt-param.git
 cd amt-param
 
-# Build plugin (skip tests)
-mvn -U -DskipTests clean package
+# Build plugin (skip tests và license check)
+mvn clean compile hpi:hpi -DskipTests
 
-# Hoặc build với settings-jenkins.xml
-mvn -U -DskipTests -s settings-jenkins.xml clean package
+# File plugin sẽ ở: target/amt-param.hpi
 ```
 
 ### Install plugin
@@ -39,15 +39,40 @@ mvn -U -DskipTests -s settings-jenkins.xml clean package
 
 ## 📖 Sử dụng
 
-### REST API
+### Job API Endpoint (Khuyến nghị - v1.0.3+)
 
-**Endpoint:** `GET /amt-param/get`
+Cách đơn giản nhất để lấy thông tin parameters:
+
+```bash
+GET {JENKINS_URL}/job/{JOB_NAME}/api?params=param1:value1,param2:value2
+```
+
+**Ví dụ:**
+```bash
+# Lấy parameters của job AMT_param với Channel=C01
+curl "https://jenkins.thangnotes.dev/job/AMT_param/api?params=Channel:C01"
+
+# Lấy tất cả parameters (không có current values)
+curl "https://jenkins.thangnotes.dev/job/AMT_param/api"
+
+# Job trong folder
+curl "https://jenkins.thangnotes.dev/job/MyFolder/job/MyJob/api?params=param:value"
+```
+
+### Legacy REST API (Vẫn được hỗ trợ)
+
+**Endpoint:** `GET /amt-integration/get`
 
 **Parameters:**
-- `job` (required) - Tên job hoặc full path của job
+- `job` (required) - Full URL của Jenkins job
 - `params` (optional) - Current values cho cascade parameters, format: `param1:value1,param2:value2`
 
-### Ví dụ
+**Ví dụ:**
+```bash
+curl "https://jenkins.thangnotes.dev/amt-integration/get?job=https://jenkins.thangnotes.dev/job/AMT_param&params=Channel:C01"
+```
+
+### Ví dụ chi tiết
 
 #### 1. Lấy tất cả parameters với default values
 
