@@ -74,7 +74,13 @@ public class RenderedParameterInfo {
      * Thông báo lỗi nếu có vấn đề khi render parameter
      */
     private String errorMessage;
-    
+
+    /**
+     * Dữ liệu HTML hoặc nội dung đặc biệt cho DynamicReferenceParameter
+     * Chỉ sử dụng cho parameters có inputType là DYNAMIC_REFERENCE
+     */
+    private String data;
+
     /**
      * Constructor mặc định
      */
@@ -203,7 +209,15 @@ public class RenderedParameterInfo {
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
     }
-    
+
+    public String getData() {
+        return data;
+    }
+
+    public void setData(String data) {
+        this.data = data;
+    }
+
     /**
      * Kiểm tra xem parameter có choices hay không
      * 
@@ -224,13 +238,22 @@ public class RenderedParameterInfo {
     
     /**
      * Kiểm tra xem parameter có lỗi hay không
-     * 
+     *
      * @return true nếu có error message, false nếu không
      */
     public boolean hasError() {
         return errorMessage != null && !errorMessage.trim().isEmpty();
     }
-    
+
+    /**
+     * Kiểm tra xem parameter có data hay không
+     *
+     * @return true nếu có data content, false nếu không
+     */
+    public boolean hasData() {
+        return data != null && !data.trim().isEmpty();
+    }
+
     /**
      * Chuyển đổi object thành JSON string
      * 
@@ -258,8 +281,11 @@ public class RenderedParameterInfo {
         
         // Arrays
         sb.append("\"dependencies\":").append(jsonArray(dependencies)).append(",");
-        sb.append("\"choices\":").append(jsonArray(choices));
-        
+        sb.append("\"choices\":").append(jsonArray(choices)).append(",");
+
+        // Data field for DynamicReferenceParameter
+        sb.append("\"data\":").append(jsonString(data));
+
         sb.append("}");
         return sb.toString();
     }
@@ -311,6 +337,7 @@ public class RenderedParameterInfo {
                 ", isDynamic=" + isDynamic +
                 ", choicesCount=" + (choices != null ? choices.size() : 0) +
                 ", dependenciesCount=" + (dependencies != null ? dependencies.size() : 0) +
+                ", hasData=" + (data != null && !data.trim().isEmpty()) +
                 '}';
     }
 }

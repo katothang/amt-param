@@ -82,17 +82,33 @@ public class ActiveChoicesService {
             } else if (className.contains("DynamicReferenceParameter")) {
                 paramInfo.setInputType(ParameterInputType.DYNAMIC_REFERENCE);
             }
-            
-            // Lấy choices từ script
-            List<String> choices = getChoicesFromActiveChoicesParameter(paramDef, currentValues);
-            paramInfo.setChoices(choices);
-            
+
             // Lấy dependencies (referenced parameters)
             List<String> dependencies = getDependenciesFromActiveChoicesParameter(paramDef);
             paramInfo.setDependencies(dependencies);
-            
-            LOGGER.log(Level.FINE, "Successfully rendered Active Choices parameter " + paramDef.getName() + 
-                      " with " + choices.size() + " choices and " + dependencies.size() + " dependencies");
+
+            // Xử lý khác nhau cho DynamicReferenceParameter vs các loại khác
+            if (className.contains("DynamicReferenceParameter")) {
+                // Đối với DynamicReferenceParameter, lưu HTML content vào field 'data'
+                List<String> htmlContent = getChoicesFromActiveChoicesParameter(paramDef, currentValues);
+                if (!htmlContent.isEmpty()) {
+                    // Ghép tất cả HTML content thành một string
+                    StringBuilder dataBuilder = new StringBuilder();
+                    for (String content : htmlContent) {
+                        dataBuilder.append(content);
+                    }
+                    paramInfo.setData(dataBuilder.toString());
+                }
+                // Không set choices cho DynamicReferenceParameter
+                LOGGER.log(Level.FINE, "Successfully rendered DynamicReferenceParameter " + paramDef.getName() +
+                          " with HTML data and " + dependencies.size() + " dependencies");
+            } else {
+                // Đối với ChoiceParameter và CascadeChoiceParameter, lưu vào field 'choices'
+                List<String> choices = getChoicesFromActiveChoicesParameter(paramDef, currentValues);
+                paramInfo.setChoices(choices);
+                LOGGER.log(Level.FINE, "Successfully rendered Active Choices parameter " + paramDef.getName() +
+                          " with " + choices.size() + " choices and " + dependencies.size() + " dependencies");
+            }
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Lỗi khi render Active Choices parameter " + paramDef.getName() + ": " + e.getMessage(), e);
