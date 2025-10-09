@@ -328,10 +328,15 @@ public class RenderedParametersApi implements RootAction {
     /**
      * Parse parameter values từ query string
      *
-     * Format hỗ trợ: "param1:value1,param2:value2,param3:value with spaces"
+     * Format hỗ trợ:
+     * - Single value: "param1:value1,param2:value2"
+     * - Array value (checkbox): "param1:value1,param2:[value1,value2,value3]"
+     * 
+     * Ví dụ: "Channel:C01,depen:[OptionB,OptionA]"
+     * Kết quả: {Channel="C01", depen="OptionB,OptionA"}
      *
      * @param paramsStr Query string chứa parameter values
-     * @return Map<String, String> với key là tên parameter, value là giá trị
+     * @return Map<String, String> với key là tên parameter, value là giá trị (comma-separated cho array)
      */
     private Map<String, String> parseParameterValues(String paramsStr) {
         Map<String, String> values = new HashMap<>();
@@ -341,24 +346,86 @@ public class RenderedParametersApi implements RootAction {
         }
 
         try {
-            // Split by comma, nhưng cẩn thận với values có chứa comma
-            String[] pairs = paramsStr.split(",");
-            for (String pair : pairs) {
-                if (pair.trim().isEmpty()) {
+            // Parse từng parameter, xử lý cả single value và array value
+            int i = 0;
+            while (i < paramsStr.length()) {
+                // Tìm tên parameter (trước dấu :)
+                int colonIndex = paramsStr.indexOf(':', i);
+                if (colonIndex == -1) {
+                    break; // Không còn parameter nào
+                }
+                
+                String key = paramsStr.substring(i, colonIndex).trim();
+                
+                // Bỏ qua leading comma nếu có
+                if (key.startsWith(",")) {
+                    key = key.substring(1).trim();
+                }
+                
+                if (key.isEmpty()) {
+                    i = colonIndex + 1;
                     continue;
                 }
-
-                // Split by first colon only (values có thể chứa colon)
-                int colonIndex = pair.indexOf(':');
-                if (colonIndex > 0 && colonIndex < pair.length() - 1) {
-                    String key = pair.substring(0, colonIndex).trim();
-                    String value = pair.substring(colonIndex + 1).trim();
-
-                    if (!key.isEmpty()) {
-                        values.put(key, value);
+                
+                // Parse value (có thể là single value hoặc array [value1,value2])
+                int valueStart = colonIndex + 1;
+                String value;
+                
+                // Check xem value có phải là array không (bắt đầu bằng [)
+                if (valueStart < paramsStr.length() && paramsStr.charAt(valueStart) == '[') {
+                    // Parse array value: [value1,value2,value3]
+                    int closeBracket = paramsStr.indexOf(']', valueStart);
+                    if (closeBracket == -1) {
+                        // Không tìm thấy ], treat như string thông thường
+                        int nextComma = paramsStr.indexOf(',', valueStart);
+                        if (nextComma == -1) {
+                            value = paramsStr.substring(valueStart).trim();
+                            i = paramsStr.length();
+                        } else {
+                            value = paramsStr.substring(valueStart, nextComma).trim();
+                            i = nextComma + 1;
+                        }
+                    } else {
+                        // Extract array content (bỏ [])
+                        String arrayContent = paramsStr.substring(valueStart + 1, closeBracket).trim();
+                        // Convert array thành comma-separated string
+                        value = arrayContent;
+                        i = closeBracket + 1;
+                        
+                        // Skip comma sau ] nếu có
+                        if (i < paramsStr.length() && paramsStr.charAt(i) == ',') {
+                            i++;
+                        }
+                    }
+                } else {
+                    // Parse single value (đến dấu , tiếp theo hoặc end of string)
+                    int nextComma = paramsStr.indexOf(',', valueStart);
+                    
+                    // Tuy nhiên, cần check xem comma có nằm trong array bracket không
+                    int openBracket = paramsStr.indexOf('[', valueStart);
+                    if (openBracket != -1 && openBracket < nextComma) {
+                        // Có array bracket giữa value và comma, tìm comma sau ]
+                        int closeBracket = paramsStr.indexOf(']', openBracket);
+                        if (closeBracket != -1) {
+                            nextComma = paramsStr.indexOf(',', closeBracket);
+                        }
+                    }
+                    
+                    if (nextComma == -1) {
+                        value = paramsStr.substring(valueStart).trim();
+                        i = paramsStr.length();
+                    } else {
+                        value = paramsStr.substring(valueStart, nextComma).trim();
+                        i = nextComma + 1;
                     }
                 }
+                
+                // Add to map
+                if (!key.isEmpty()) {
+                    values.put(key, value);
+                }
             }
+
         } catch (Exception e) {
             java.util.logging.Logger.getLogger(getClass().getName())
                 .log(java.util.logging.Level.WARNING, "Error parsing parameter values: " + paramsStr + " - " + e.getMessage());
