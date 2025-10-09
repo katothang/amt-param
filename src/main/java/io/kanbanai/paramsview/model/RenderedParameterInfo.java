@@ -267,7 +267,9 @@ public class RenderedParameterInfo {
         sb.append("\"name\":").append(jsonString(name)).append(",");
         sb.append("\"type\":").append(jsonString(type)).append(",");
         sb.append("\"description\":").append(jsonString(description)).append(",");
-        sb.append("\"currentValue\":").append(jsonString(currentValue)).append(",");
+        
+        // CurrentValue - serialize as array if contains multiple values (comma-separated)
+        sb.append("\"currentValue\":").append(serializeCurrentValue(currentValue)).append(",");
         
         // Input type
         sb.append("\"inputType\":").append(jsonString(inputType != null ? inputType.getValue() : null)).append(",");
@@ -284,10 +286,33 @@ public class RenderedParameterInfo {
         sb.append("\"choices\":").append(jsonArray(choices)).append(",");
 
         // Data field for DynamicReferenceParameter
-        sb.append("\"data\":").append(jsonString(data));
+        // Clean data nếu chỉ chứa "[]" hoặc "[][]"
+        String cleanedData = cleanDataField(data);
+        sb.append("\"data\":").append(jsonString(cleanedData));
 
         sb.append("}");
         return sb.toString();
+    }
+    
+    /**
+     * Helper method để clean data field
+     * Loại bỏ các pattern như "[]", "[][]", "[][][]" etc.
+     */
+    private String cleanDataField(String data) {
+        if (data == null || data.trim().isEmpty()) {
+            return null;
+        }
+        
+        // Remove all occurrences of []
+        String cleaned = data.replaceAll("\\[\\]", "").trim();
+        
+        // Nếu sau khi remove [] không còn gì, return null
+        if (cleaned.isEmpty()) {
+            return null;
+        }
+        
+        // Nếu data chỉ chứa whitespace và [], return null
+        return data;
     }
     
     /**
@@ -310,17 +335,85 @@ public class RenderedParameterInfo {
     }
     
     /**
+     * Helper method để serialize currentValue
+     * Nếu currentValue chứa nhiều giá trị (phân cách bởi dấu phẩy), return array
+     * Ngược lại return string
+     */
+    private String serializeCurrentValue(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return jsonString(value);
+        }
+        
+        // Check nếu value đã là JSON array format (bắt đầu với [ và kết thúc với ])
+        String trimmed = value.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            // Already a JSON array, return as-is (đã được format sẵn)
+            return trimmed;
+        }
+        
+        // Check nếu value chứa dấu phẩy và có nhiều hơn 1 item
+        if (value.contains(",")) {
+            String[] parts = value.split(",");
+            
+            // Trim và filter ra empty values
+            List<String> values = new ArrayList<>();
+            for (String part : parts) {
+                String trimmedPart = part.trim();
+                if (!trimmedPart.isEmpty()) {
+                    values.add(trimmedPart);
+                }
+            }
+            
+            // Nếu có nhiều hơn 1 giá trị, return array
+            if (values.size() > 1) {
+                // Build JSON array trực tiếp để tránh double escaping
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < values.size(); i++) {
+                    sb.append(jsonString(values.get(i)));
+                    if (i < values.size() - 1) {
+                        sb.append(",");
+                    }
+                }
+                sb.append("]");
+                return sb.toString();
+            }
+            
+            // Nếu chỉ có 1 giá trị sau khi split, return string
+            if (values.size() == 1) {
+                return jsonString(values.get(0));
+            }
+        }
+        
+        // Default: return as string
+        return jsonString(value);
+    }
+    
+    /**
      * Helper method để chuyển List<String> thành JSON array
+     * Filter ra các giá trị empty hoặc "[]" để tránh hiển thị ["[]", "[]"]
      */
     private String jsonArray(List<String> list) {
         if (list == null) {
             return "[]";
         }
         
+        // Filter ra các giá trị rỗng hoặc chỉ chứa "[]"
+        List<String> filteredList = new ArrayList<>();
+        for (String item : list) {
+            if (item != null && !item.trim().isEmpty() && !"[]".equals(item.trim())) {
+                filteredList.add(item);
+            }
+        }
+        
+        // Nếu sau khi filter không còn gì, return []
+        if (filteredList.isEmpty()) {
+            return "[]";
+        }
+        
         StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < list.size(); i++) {
-            sb.append(jsonString(list.get(i)));
-            if (i < list.size() - 1) {
+        for (int i = 0; i < filteredList.size(); i++) {
+            sb.append(jsonString(filteredList.get(i)));
+            if (i < filteredList.size() - 1) {
                 sb.append(",");
             }
         }

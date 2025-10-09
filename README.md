@@ -16,19 +16,32 @@
 
 ### Job API Endpoint (Khuyến nghị - v1.0.3+)
 
-Cách đơn giản nhất để lấy thông tin parameters:
+API hỗ trợ cả **GET** và **POST** methods để lấy thông tin parameters:
 
+#### GET Method
 ```bash
 GET {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
 ```
 
-**Ví dụ:**
+#### POST Method (Recommended for production)
+```bash
+POST {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api
+Content-Type: application/json
+
+{
+  "params": {
+    "param1": "value1",
+    "param2": "value2"
+  }
+}
+```
+
+**Ví dụ GET:**
 ```bash
 # Lấy parameters của job AMT_param với Channel=C01
 curl "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api?params=Channel:C01"
 
 # trong đó params là giá trị mà người dùng đã nhập trên màn hình AMT nó dùng làm điều kiện để ẩn hiện các param khác nếu có 
-
 
 # Lấy tất cả parameters (không có current values)
 curl "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api"
@@ -36,6 +49,35 @@ curl "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api"
 # Lấy parameters của job trong folder
 curl "https://jenkins.thangnotes.dev/job/MyFolder/job/MyJob/amt-integration/api?params=param1:value1,param2:value2"
 ``` 
+
+**Ví dụ POST (String format):**
+```bash
+curl -X POST "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": "Channel:C01,depen:[OptionB,OptionA]"
+  }'
+```
+
+**Ví dụ POST (Object format - Recommended):**
+```bash
+curl -X POST "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "params": {
+      "Channel": "C01",
+      "depen": "[OptionB,OptionA]"
+    }
+  }'
+```
+
+**Tại sao nên dùng POST method:**
+- ✅ Không bị giới hạn độ dài URL (GET thường giới hạn ~2000 characters)
+- ✅ Parameters không hiển thị trong URL logs
+- ✅ Object format dễ đọc và maintain hơn
+- ✅ Tốt hơn cho security khi có sensitive parameters
+- ✅ Phù hợp cho production applications
+
 **FORMAT DATA TRẢ VỀ :**
 ```json
 {
@@ -68,7 +110,7 @@ curl "https://jenkins.thangnotes.dev/job/MyFolder/job/MyJob/amt-integration/api?
         "name": "depen",
         "type": "CascadeChoiceParameter",
         "description": "Danh sách giá trị của tham số này phụ thuộc vào Channel. Nếu Channel = 'C01', tham số sẽ hiển thị hai checkbox OptionA và OptionB. Nếu Channel là 'C02' hoặc giá trị khác, tham số sẽ hiển thị ba checkbox OptionA, OptionB và OptionC. Bạn có thể chọn một hoặc nhiều tùy chọn.",
-        "currentValue": "OptionB",
+        "currentValue": ["OptionB", "OptionA"],
         "inputType": "select",
         "isDynamic": true,
         "isRequired": false,

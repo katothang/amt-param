@@ -89,7 +89,7 @@ public class RenderedParametersAction implements Action {
     }
 
     /**
-     * Xử lý request tại /job/{JOB_NAME}/amt-integration/api
+     * Xử lý GET request tại /job/{JOB_NAME}/amt-integration/api
      * với query parameter "params"
      *
      * URL pattern: /job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
@@ -99,6 +99,13 @@ public class RenderedParametersAction implements Action {
      * @throws IOException nếu có lỗi I/O
      */
     public void doApi(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        // Hỗ trợ cả GET và POST
+        if ("POST".equalsIgnoreCase(req.getMethod())) {
+            doApiPost(req, rsp);
+            return;
+        }
+        
+        // GET method
         String paramsStr = req.getParameter("params");
         
         if (paramsStr == null) {
@@ -126,11 +133,287 @@ public class RenderedParametersAction implements Action {
         } catch (Exception e) {
             // Log error và return 500
             java.util.logging.Logger.getLogger(getClass().getName())
-                .log(java.util.logging.Level.SEVERE, "Unexpected error in doIndex: " + e.getMessage(), e);
+                .log(java.util.logging.Level.SEVERE, "Unexpected error in doApi: " + e.getMessage(), e);
 
             sendErrorResponse(rsp, 500, "Internal server error",
                 "An unexpected error occurred while processing the request");
         }
+    }
+
+    /**
+     * Xử lý POST request tại /job/{JOB_NAME}/amt-integration/api
+     * với JSON body chứa parameters
+     *
+     * URL pattern: POST /job/{JOB_NAME}/amt-integration/api
+     * Request Body: {"params": "param1:value1,param2:value2"} hoặc {"params": {"param1": "value1", "param2": "value2"}}
+     *
+     * @param req StaplerRequest
+     * @param rsp StaplerResponse
+     * @throws IOException nếu có lỗi I/O
+     */
+    private void doApiPost(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        try {
+            // Check permissions
+            if (!checkJobReadPermission(job)) {
+                sendErrorResponse(rsp, 403, "Access denied to job: " + job.getName(),
+                    "You don't have READ permission for this job");
+                return;
+            }
+
+            // Parse JSON body
+            Map<String, String> currentValues = parseJsonBody(req);
+
+            // Delegate to service layer để render parameters
+            RenderedParametersInfo parametersInfo = parameterService.renderJobParameters(job, currentValues);
+
+            // Return JSON response
+            sendSuccessResponse(rsp, parametersInfo);
+
+        } catch (Exception e) {
+            // Log error và return 500
+            java.util.logging.Logger.getLogger(getClass().getName())
+                .log(java.util.logging.Level.SEVERE, "Unexpected error in doApiPost: " + e.getMessage(), e);
+
+            sendErrorResponse(rsp, 500, "Internal server error",
+                "An unexpected error occurred while processing the request: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Parse JSON body từ POST request
+     * 
+     * Hỗ trợ 2 format:
+     * 1. String format: {"params": "Channel:C01,depen:[OptionB,OptionA]"}
+     * 2. Object format: {"params": {"Channel": "C01", "depen": "[OptionB,OptionA]"}}
+     * 
+     * @param req StaplerRequest
+     * @return Map chứa parameter values
+     * @throws IOException nếu có lỗi parse JSON
+     */
+    private Map<String, String> parseJsonBody(StaplerRequest req) throws IOException {
+        try {
+            // Read request body
+            StringBuilder sb = new StringBuilder();
+            java.io.BufferedReader reader = req.getReader();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            
+            String body = sb.toString().trim();
+            
+            if (body.isEmpty()) {
+                return new HashMap<>();
+            }
+
+            // Simple JSON parsing (không dùng external library)
+            // Format 1: {"params": "Channel:C01,depen:[OptionB,OptionA]"}
+            // Format 2: {"params": {"Channel": "C01", "depen": "[OptionB,OptionA]"}}
+            
+            // Extract params value
+            int paramsStart = body.indexOf("\"params\"");
+            if (paramsStart == -1) {
+                return new HashMap<>();
+            }
+            
+            int colonAfterParams = body.indexOf(":", paramsStart);
+            if (colonAfterParams == -1) {
+                return new HashMap<>();
+            }
+            
+            // Skip whitespace after colon
+            int valueStart = colonAfterParams + 1;
+            while (valueStart < body.length() && Character.isWhitespace(body.charAt(valueStart))) {
+                valueStart++;
+            }
+            
+            if (valueStart >= body.length()) {
+                return new HashMap<>();
+            }
+            
+            // Check if value is string or object
+            if (body.charAt(valueStart) == '"') {
+                // Format 1: String value
+                int stringStart = valueStart + 1;
+                int stringEnd = body.indexOf('"', stringStart);
+                
+                // Handle escaped quotes
+                while (stringEnd > 0 && body.charAt(stringEnd - 1) == '\\') {
+                    stringEnd = body.indexOf('"', stringEnd + 1);
+                }
+                
+                if (stringEnd == -1) {
+                    return new HashMap<>();
+                }
+                
+                String paramsStr = body.substring(stringStart, stringEnd);
+                // Unescape the string
+                paramsStr = unescapeJsonString(paramsStr);
+                return parseParameterValues(paramsStr);
+                
+            } else if (body.charAt(valueStart) == '{') {
+                // Format 2: Object value
+                int objectStart = valueStart;
+                int objectEnd = findMatchingBrace(body, objectStart);
+                
+                if (objectEnd == -1) {
+                    return new HashMap<>();
+                }
+                
+                String paramsObject = body.substring(objectStart, objectEnd + 1);
+                return parseJsonObject(paramsObject);
+            }
+            
+            return new HashMap<>();
+            
+        } catch (Exception e) {
+            java.util.logging.Logger.getLogger(getClass().getName())
+                .log(java.util.logging.Level.WARNING, "Error parsing JSON body: " + e.getMessage(), e);
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * Parse JSON object thành Map
+     * Format: {"param1": "value1", "param2": "value2", "param3": "[v1,v2,v3]"}
+     */
+    private Map<String, String> parseJsonObject(String jsonObject) {
+        Map<String, String> result = new HashMap<>();
+        
+        try {
+            // Remove leading/trailing { }
+            String content = jsonObject.trim();
+            if (content.startsWith("{")) {
+                content = content.substring(1);
+            }
+            if (content.endsWith("}")) {
+                content = content.substring(0, content.length() - 1);
+            }
+            content = content.trim();
+            
+            if (content.isEmpty()) {
+                return result;
+            }
+            
+            // Parse each key-value pair
+            int i = 0;
+            while (i < content.length()) {
+                // Skip whitespace
+                while (i < content.length() && Character.isWhitespace(content.charAt(i))) {
+                    i++;
+                }
+                
+                if (i >= content.length()) break;
+                
+                // Parse key
+                if (content.charAt(i) != '"') {
+                    break;
+                }
+                
+                int keyStart = i + 1;
+                int keyEnd = content.indexOf('"', keyStart);
+                if (keyEnd == -1) break;
+                
+                String key = content.substring(keyStart, keyEnd);
+                
+                // Find colon
+                i = keyEnd + 1;
+                while (i < content.length() && content.charAt(i) != ':') {
+                    i++;
+                }
+                if (i >= content.length()) break;
+                
+                i++; // Skip colon
+                
+                // Skip whitespace
+                while (i < content.length() && Character.isWhitespace(content.charAt(i))) {
+                    i++;
+                }
+                
+                if (i >= content.length()) break;
+                
+                // Parse value
+                String value;
+                if (content.charAt(i) == '"') {
+                    // String value
+                    int valueStart = i + 1;
+                    int valueEnd = content.indexOf('"', valueStart);
+                    
+                    // Handle escaped quotes
+                    while (valueEnd > 0 && content.charAt(valueEnd - 1) == '\\') {
+                        valueEnd = content.indexOf('"', valueEnd + 1);
+                    }
+                    
+                    if (valueEnd == -1) break;
+                    
+                    value = content.substring(valueStart, valueEnd);
+                    value = unescapeJsonString(value);
+                    i = valueEnd + 1;
+                } else if (content.charAt(i) == '[') {
+                    // Array value
+                    int arrayEnd = content.indexOf(']', i);
+                    if (arrayEnd == -1) break;
+                    
+                    value = content.substring(i, arrayEnd + 1);
+                    i = arrayEnd + 1;
+                } else {
+                    // Other value (number, boolean, null)
+                    int valueEnd = i;
+                    while (valueEnd < content.length() && 
+                           content.charAt(valueEnd) != ',' && 
+                           content.charAt(valueEnd) != '}') {
+                        valueEnd++;
+                    }
+                    value = content.substring(i, valueEnd).trim();
+                    i = valueEnd;
+                }
+                
+                result.put(key, value);
+                
+                // Skip comma
+                while (i < content.length() && (Character.isWhitespace(content.charAt(i)) || content.charAt(i) == ',')) {
+                    i++;
+                }
+            }
+            
+        } catch (Exception e) {
+            java.util.logging.Logger.getLogger(getClass().getName())
+                .log(java.util.logging.Level.WARNING, "Error parsing JSON object: " + e.getMessage());
+        }
+        
+        return result;
+    }
+
+    /**
+     * Find matching closing brace
+     */
+    private int findMatchingBrace(String str, int openBraceIndex) {
+        int depth = 0;
+        for (int i = openBraceIndex; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Unescape JSON string
+     */
+    private String unescapeJsonString(String str) {
+        return str.replace("\\\"", "\"")
+                  .replace("\\\\", "\\")
+                  .replace("\\n", "\n")
+                  .replace("\\r", "\r")
+                  .replace("\\t", "\t")
+                  .replace("\\b", "\b")
+                  .replace("\\f", "\f");
     }
 
     /**
