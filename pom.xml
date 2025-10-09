@@ -14,7 +14,7 @@
   <version>1.0.2</version>
   <packaging>hpi</packaging>
   <name>amt-integration</name>
-  <description>List job parameters like Build With Parameters (including dynamic choices if available)</description>
+  <description>Plugin tích hợp với jenkins để truy xuất thông tin parammeter của jenkins dự án AMT - Kanban team</description>
   <properties>
     <jenkins.version>2.414.3</jenkins.version>
     <java.level>11</java.level>
