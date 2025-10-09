@@ -1,4 +1,4 @@
-package io.kanbanai.paramsview;
+package io.kanbanai.amtIntegration;
 
 import hudson.Extension;
 import hudson.model.*;
@@ -10,32 +10,38 @@ import java.util.Collections;
 
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
-import org.kohsuke.stapler.QueryParameter;
 
 import java.io.IOException;
 import java.util.*;
 
-import io.kanbanai.paramsview.service.ParameterRenderingService;
-import io.kanbanai.paramsview.service.PluginAvailabilityService;
-import io.kanbanai.paramsview.model.RenderedParametersInfo;
+import io.kanbanai.amtIntegration.service.ParameterRenderingService;
+import io.kanbanai.amtIntegration.service.PluginAvailabilityService;
+import io.kanbanai.amtIntegration.model.RenderedParametersInfo;
 
 /**
- * Jenkins Job Action để thêm endpoint vào mỗi job URL
+ * Jenkins Job Action to add endpoint to each job URL.
  *
- * Action này sẽ được inject vào tất cả các Job objects trong Jenkins,
- * cho phép truy cập parameters thông qua URL pattern:
+ * This action will be injected into all Job objects in Jenkins,
+ * allowing parameter access through URL pattern:
  * {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
  *
- * Hoạt động:
- * - Plugin tạo endpoint /amt-integration/api cho mỗi job
- * - Endpoint /amt-integration/ trả về thông tin hướng dẫn
- * - Endpoint /amt-integration/api?params=... trả về JSON với thông tin parameters
+ * Operation:
+ * - Plugin creates /amt-integration/api endpoint for each job
+ * - Endpoint /amt-integration/ returns guidance information
+ * - Endpoint /amt-integration/api?params=... returns JSON with parameter information
  *
- * Kiến trúc:
- * - Sử dụng TransientActionFactory để inject action vào mỗi job
- * - doIndex() xử lý request tại /amt-integration/ (info endpoint)
- * - doApi() xử lý request tại /amt-integration/api (parameters endpoint)
- * - Trả về JSON response với thông tin parameters
+ * Architecture:
+ * - Uses TransientActionFactory to inject action into each job
+ * - doIndex() handles requests at /amt-integration/ (info endpoint)
+ * - doApi() handles requests at /amt-integration/api (parameters endpoint)
+ * - Returns JSON response with parameter information
+ *
+ * Flow:
+ * 1. TransientActionFactory injects this action into all Job objects
+ * 2. Action provides /amt-integration endpoint for each job
+ * 3. API endpoint receives parameter values and renders complete parameter info
+ * 4. Returns JSON response with all parameter details for UI rendering
+ * 5. Handles errors gracefully with appropriate HTTP status codes
  *
  * @author KanbanAI
  * @since 1.0.3

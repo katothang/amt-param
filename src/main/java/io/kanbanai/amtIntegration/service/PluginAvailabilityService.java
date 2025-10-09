@@ -1,4 +1,4 @@
-package io.kanbanai.paramsview.service;
+package io.kanbanai.amtIntegration.service;
 
 import hudson.PluginWrapper;
 import jenkins.model.Jenkins;
@@ -6,14 +6,21 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 /**
- * Service để kiểm tra tính khả dụng của các plugin Jenkins
- * 
- * Service này cung cấp các phương thức để kiểm tra xem một plugin có được cài đặt
- * và kích hoạt hay không trước khi sử dụng các tính năng của plugin đó.
- * 
- * Điều này đảm bảo rằng code sẽ hoạt động ổn định ngay cả khi các plugin phụ thuộc
- * không được cài đặt, thay vì gây ra ClassNotFoundException hoặc NoClassDefFoundError.
- * 
+ * Service for checking availability of Jenkins plugins.
+ *
+ * This service provides methods to check whether a plugin is installed
+ * and activated before using features of that plugin.
+ *
+ * This ensures that code will work stably even when dependent plugins
+ * are not installed, instead of causing ClassNotFoundException or NoClassDefFoundError.
+ *
+ * Flow:
+ * 1. Caches plugin availability checks to avoid repeated lookups
+ * 2. Provides safe methods to check plugin installation and activation
+ * 3. Returns plugin version information when available
+ * 4. Enables graceful degradation when plugins are missing
+ * 5. Supports multiple plugin types with extensible architecture
+ *
  * @author KanbanAI
  * @since 1.0.2
  */
@@ -24,17 +31,17 @@ public class PluginAvailabilityService {
     // Singleton instance
     private static PluginAvailabilityService instance;
     
-    // Cache kết quả kiểm tra plugin để tránh kiểm tra lại nhiều lần
+    // Cache plugin check results to avoid repeated checks
     private Boolean activeChoicesAvailable = null;
-    
+
     /**
-     * Private constructor cho Singleton pattern
+     * Private constructor for Singleton pattern
      */
     private PluginAvailabilityService() {
     }
-    
+
     /**
-     * Lấy instance duy nhất của service (Singleton pattern)
+     * Gets the unique instance of the service (Singleton pattern)
      * 
      * @return PluginAvailabilityService instance
      */

@@ -1,4 +1,4 @@
-package io.kanbanai.paramsview;
+package io.kanbanai.amtIntegration;
 
 import hudson.Extension;
 import hudson.model.*;
@@ -10,28 +10,36 @@ import javax.servlet.ServletException;
 import java.io.IOException;
 import java.util.*;
 
-import io.kanbanai.paramsview.service.ParameterRenderingService;
-import io.kanbanai.paramsview.service.PluginAvailabilityService;
-import io.kanbanai.paramsview.model.RenderedParametersInfo;
+import io.kanbanai.amtIntegration.service.ParameterRenderingService;
+import io.kanbanai.amtIntegration.service.PluginAvailabilityService;
+import io.kanbanai.amtIntegration.model.RenderedParametersInfo;
+import io.kanbanai.amtIntegration.config.ApiConstants;
 
 /**
- * Jenkins Plugin REST API Controller để lấy thông tin parameters của job
+ * Jenkins Plugin REST API Controller for retrieving job parameter information.
  *
- * Controller này cung cấp REST API endpoint để lấy thông tin đầy đủ về các parameters
- * của một Jenkins job, tương tự như màn hình "Build with Parameters" của Jenkins UI.
+ * This controller provides REST API endpoints to get comprehensive information about
+ * parameters of a Jenkins job, similar to the "Build with Parameters" screen in Jenkins UI.
  *
- * Kiến trúc mới (v1.0.2+):
- * - Controller chỉ xử lý HTTP request/response và validation
- * - Business logic được delegate cho các Service classes
- * - Hỗ trợ graceful fallback khi Active Choices plugin không khả dụng
- * - Sử dụng typed models thay vì generic Objects
+ * New architecture (v1.0.2+):
+ * - Controller only handles HTTP request/response and validation
+ * - Business logic is delegated to Service classes
+ * - Supports graceful fallback when Active Choices plugin is not available
+ * - Uses typed models instead of generic Objects
  *
- * Các tính năng chính:
- * - Lấy tất cả parameters của job (built-in và Active Choices)
- * - Render dynamic parameters với giá trị thực tế
- * - Xử lý cascade parameters (parameters phụ thuộc vào nhau)
- * - Hỗ trợ tất cả loại parameter: String, Boolean, Choice, Text, Password, Active Choices, etc.
- * - Kiểm tra plugin availability trước khi sử dụng
+ * Main features:
+ * - Retrieves all job parameters (built-in and Active Choices)
+ * - Renders dynamic parameters with actual values
+ * - Handles cascade parameters (parameters dependent on each other)
+ * - Supports all parameter types: String, Boolean, Choice, Text, Password, Active Choices, etc.
+ * - Checks plugin availability before use
+ *
+ * Flow:
+ * 1. Receives HTTP request with job name and optional parameter values
+ * 2. Validates request parameters and job existence
+ * 3. Delegates parameter rendering to ParameterRenderingService
+ * 4. Returns JSON response with complete parameter information
+ * 5. Handles errors gracefully with appropriate HTTP status codes
  *
  * @author KanbanAI
  * @since 1.0.2
@@ -44,10 +52,10 @@ public class RenderedParametersApi implements RootAction {
     private final PluginAvailabilityService pluginService;
 
     /**
-     * Constructor - khởi tạo service dependencies
+     * Constructor - initializes service dependencies
      *
-     * Sử dụng Singleton pattern để lightweight dependency injection.
-     * Services được khởi tạo lazy và cached để tối ưu performance.
+     * Uses Singleton pattern for lightweight dependency injection.
+     * Services are initialized lazily and cached for performance optimization.
      */
     public RenderedParametersApi() {
         this.parameterService = ParameterRenderingService.getInstance();
@@ -57,10 +65,10 @@ public class RenderedParametersApi implements RootAction {
     /**
      * {@inheritDoc}
      *
-     * Trả về null để không hiển thị plugin trong Jenkins sidebar menu.
-     * Plugin chỉ cung cấp REST API, không có UI interface.
+     * Returns null to not display plugin in Jenkins sidebar menu.
+     * Plugin only provides REST API, no UI interface.
      *
-     * @return null - không hiển thị icon trong sidebar
+     * @return null - do not display icon in sidebar
      */
     @Override
     public String getIconFileName() {
@@ -70,30 +78,30 @@ public class RenderedParametersApi implements RootAction {
     /**
      * {@inheritDoc}
      *
-     * Display name của plugin, sử dụng cho logging và debugging.
+     * Display name of the plugin, used for logging and debugging.
      *
-     * @return Display name của plugin
+     * @return Display name of the plugin
      */
     @Override
     public String getDisplayName() {
-        return "AMT Parameters API";
+        return ApiConstants.PLUGIN_DISPLAY_NAME;
     }
 
     /**
      * {@inheritDoc}
      *
-     * URL name định nghĩa endpoint path cho plugin.
-     * API sẽ accessible tại: {JENKINS_URL}/amt-integration/
-     * 
-     * Note: Từ version 1.0.3+, nên sử dụng URL pattern mới:
-     * {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
-     * thông qua RenderedParametersAction
+     * URL name defines endpoint path for the plugin.
+     * API will be accessible at: {JENKINS_URL}/amt-integration/
      *
-     * @return URL path segment cho plugin
+     * Note: From version 1.0.3+, should use new URL pattern:
+     * {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
+     * through RenderedParametersAction
+     *
+     * @return URL path segment for the plugin
      */
     @Override
     public String getUrlName() {
-        return "amt-integration";
+        return ApiConstants.API_URL_NAME;
     }
 
     /**

@@ -1,80 +1,91 @@
-package io.kanbanai.paramsview.model;
+package io.kanbanai.amtIntegration.model;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import io.kanbanai.amtIntegration.util.JsonUtils;
+import io.kanbanai.amtIntegration.util.ValidationUtils;
+import io.kanbanai.amtIntegration.config.ApiConstants;
+
 /**
- * Model class chứa thông tin đầy đủ về tất cả parameters của một Jenkins job
- * 
- * Class này đại diện cho response data của API, bao gồm thông tin về job
- * và danh sách tất cả parameters đã được render với đầy đủ thông tin.
- * 
- * Thay thế cho việc sử dụng generic Object hoặc Map, class này cung cấp
- * type safety và IDE support tốt hơn.
- * 
+ * Model class containing comprehensive information about all parameters of a Jenkins job.
+ *
+ * This class represents the API response data, including job information
+ * and a list of all parameters that have been rendered with complete information.
+ *
+ * Instead of using generic Object or Map, this class provides
+ * type safety and better IDE support.
+ *
+ * Flow:
+ * 1. Stores job metadata (name, URL, build URL)
+ * 2. Contains list of all rendered parameters
+ * 3. Tracks plugin availability information
+ * 4. Provides JSON serialization for API responses
+ * 5. Includes utility methods for parameter management
+ *
  * @author KanbanAI
  * @since 1.0.2
  */
 public class RenderedParametersInfo {
     
     /**
-     * Tên ngắn của job (không bao gồm folder path)
+     * Short name of the job (does not include folder path)
      */
     private String jobName;
-    
+
     /**
-     * Tên đầy đủ của job (bao gồm folder path nếu có)
-     * Ví dụ: "folder1/folder2/jobName"
+     * Full name of the job (includes folder path if any)
+     * Example: "folder1/folder2/jobName"
      */
     private String jobFullName;
-    
+
     /**
-     * URL tương đối của job trong Jenkins
-     * Ví dụ: "job/folder1/job/jobName/"
+     * Relative URL of the job in Jenkins
+     * Example: "job/folder1/job/jobName/"
      */
     private String jobUrl;
-    
+
     /**
-     * URL để trigger build với parameters
-     * Ví dụ: "job/folder1/job/jobName/buildWithParameters"
+     * URL to trigger build with parameters
+     * Example: "job/folder1/job/jobName/buildWithParameters"
      */
     private String buildWithParametersUrl;
-    
+
     /**
-     * Danh sách tất cả parameters của job đã được render
+     * List of all rendered job parameters
      */
     private List<RenderedParameterInfo> parameters;
-    
+
     /**
-     * Thông tin về Active Choices plugin availability
+     * Information about Active Choices plugin availability
      */
     private boolean activeChoicesPluginAvailable;
-    
+
     /**
-     * Version của Active Choices plugin (nếu có)
+     * Version of Active Choices plugin (if available)
      */
     private String activeChoicesPluginVersion;
     
     /**
-     * Constructor mặc định
+     * Default constructor
      */
     public RenderedParametersInfo() {
         this.parameters = new ArrayList<>();
     }
-    
+
     /**
-     * Constructor với thông tin job cơ bản
-     * 
-     * @param jobName Tên job
-     * @param jobFullName Tên đầy đủ của job
-     * @param jobUrl URL của job
+     * Constructor with basic job information
+     *
+     * @param jobName Job name
+     * @param jobFullName Full job name
+     * @param jobUrl Job URL
      */
     public RenderedParametersInfo(String jobName, String jobFullName, String jobUrl) {
         this();
         this.jobName = jobName;
         this.jobFullName = jobFullName;
         this.jobUrl = jobUrl;
-        this.buildWithParametersUrl = jobUrl + "buildWithParameters";
+        this.buildWithParametersUrl = jobUrl + ApiConstants.BUILD_WITH_PARAMETERS_ENDPOINT;
     }
     
     // Getters and Setters
@@ -84,6 +95,10 @@ public class RenderedParametersInfo {
     }
     
     public void setJobName(String jobName) {
+        ValidationUtils.requireNonEmpty(jobName, "jobName");
+        if (!ValidationUtils.isValidJobName(jobName)) {
+            throw new IllegalArgumentException("Invalid job name format: " + jobName);
+        }
         this.jobName = jobName;
     }
     
@@ -92,6 +107,7 @@ public class RenderedParametersInfo {
     }
     
     public void setJobFullName(String jobFullName) {
+        ValidationUtils.requireNonEmpty(jobFullName, "jobFullName");
         this.jobFullName = jobFullName;
     }
     
@@ -100,10 +116,11 @@ public class RenderedParametersInfo {
     }
     
     public void setJobUrl(String jobUrl) {
+        ValidationUtils.requireNonEmpty(jobUrl, "jobUrl");
         this.jobUrl = jobUrl;
-        // Tự động update buildWithParametersUrl khi jobUrl thay đổi
+        // Automatically update buildWithParametersUrl when jobUrl changes
         if (jobUrl != null) {
-            this.buildWithParametersUrl = jobUrl + "buildWithParameters";
+            this.buildWithParametersUrl = jobUrl + ApiConstants.BUILD_WITH_PARAMETERS_ENDPOINT;
         }
     }
     
@@ -120,16 +137,22 @@ public class RenderedParametersInfo {
     }
     
     public void setParameters(List<RenderedParameterInfo> parameters) {
+        if (parameters != null && !ValidationUtils.isValidParameterCount(parameters.size())) {
+            throw new IllegalArgumentException("Too many parameters");
+        }
         this.parameters = parameters != null ? parameters : new ArrayList<>();
     }
-    
+
     /**
-     * Thêm một parameter vào danh sách
-     * 
-     * @param parameter Parameter cần thêm
+     * Adds a parameter to the list
+     *
+     * @param parameter Parameter to add
      */
     public void addParameter(RenderedParameterInfo parameter) {
         if (parameter != null) {
+            if (!ValidationUtils.isValidParameterCount(this.parameters.size() + 1)) {
+                throw new IllegalArgumentException("Too many parameters");
+            }
             this.parameters.add(parameter);
         }
     }
@@ -151,27 +174,27 @@ public class RenderedParametersInfo {
     }
     
     /**
-     * Chuyển đổi object thành JSON string
-     * 
-     * Sử dụng StringBuilder để tạo JSON thay vì dependency external library
-     * để giữ plugin nhẹ và tương thích với nhiều version Jenkins
-     * 
-     * @return JSON string representation của object
+     * Converts object to JSON string
+     *
+     * Uses StringBuilder to create JSON instead of external library dependency
+     * to keep the plugin lightweight and compatible with multiple Jenkins versions
+     *
+     * @return JSON string representation of the object
      */
     public String toJson() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
-        
+
         // Job information
-        sb.append("\"jobName\":").append(jsonString(jobName)).append(",");
-        sb.append("\"jobFullName\":").append(jsonString(jobFullName)).append(",");
-        sb.append("\"jobUrl\":").append(jsonString(jobUrl)).append(",");
-        sb.append("\"buildWithParametersUrl\":").append(jsonString(buildWithParametersUrl)).append(",");
-        
+        sb.append("\"jobName\":").append(JsonUtils.toJsonString(jobName)).append(",");
+        sb.append("\"jobFullName\":").append(JsonUtils.toJsonString(jobFullName)).append(",");
+        sb.append("\"jobUrl\":").append(JsonUtils.toJsonString(jobUrl)).append(",");
+        sb.append("\"buildWithParametersUrl\":").append(JsonUtils.toJsonString(buildWithParametersUrl)).append(",");
+
         // Plugin information
-        sb.append("\"activeChoicesPluginAvailable\":").append(activeChoicesPluginAvailable).append(",");
-        sb.append("\"activeChoicesPluginVersion\":").append(jsonString(activeChoicesPluginVersion)).append(",");
-        
+        sb.append("\"activeChoicesPluginAvailable\":").append(JsonUtils.toJsonBoolean(activeChoicesPluginAvailable)).append(",");
+        sb.append("\"activeChoicesPluginVersion\":").append(JsonUtils.toJsonString(activeChoicesPluginVersion)).append(",");
+
         // Parameters array
         sb.append("\"parameters\":[");
         if (parameters != null) {
@@ -183,63 +206,40 @@ public class RenderedParametersInfo {
             }
         }
         sb.append("]");
-        
+
         sb.append("}");
         return sb.toString();
     }
-    
+
     /**
-     * Helper method để escape string cho JSON format
-     * 
-     * @param str String cần escape
-     * @return JSON-safe string hoặc "null" nếu input là null
-     */
-    private String jsonString(String str) {
-        if (str == null) {
-            return "null";
-        }
-        
-        // Escape các ký tự đặc biệt cho JSON
-        String escaped = str.replace("\\", "\\\\")    // Backslash
-                           .replace("\"", "\\\"")     // Double quote
-                           .replace("\n", "\\n")      // Newline
-                           .replace("\r", "\\r")      // Carriage return
-                           .replace("\t", "\\t")      // Tab
-                           .replace("\b", "\\b")      // Backspace
-                           .replace("\f", "\\f");     // Form feed
-        
-        return "\"" + escaped + "\"";
-    }
-    
-    /**
-     * Lấy số lượng parameters
-     * 
-     * @return Số lượng parameters trong job
+     * Gets the number of parameters
+     *
+     * @return Number of parameters in the job
      */
     public int getParameterCount() {
         return parameters != null ? parameters.size() : 0;
     }
-    
+
     /**
-     * Kiểm tra xem job có parameters hay không
-     * 
-     * @return true nếu job có ít nhất 1 parameter, false nếu không
+     * Checks whether the job has parameters
+     *
+     * @return true if job has at least 1 parameter, false otherwise
      */
     public boolean hasParameters() {
         return getParameterCount() > 0;
     }
-    
+
     /**
-     * Tìm parameter theo tên
-     * 
-     * @param parameterName Tên parameter cần tìm
-     * @return RenderedParameterInfo nếu tìm thấy, null nếu không
+     * Finds parameter by name
+     *
+     * @param parameterName Parameter name to find
+     * @return RenderedParameterInfo if found, null otherwise
      */
     public RenderedParameterInfo findParameterByName(String parameterName) {
         if (parameterName == null || parameters == null) {
             return null;
         }
-        
+
         return parameters.stream()
                 .filter(param -> parameterName.equals(param.getName()))
                 .findFirst()

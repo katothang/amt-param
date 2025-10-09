@@ -1,4 +1,4 @@
-package io.kanbanai.paramsview.model;
+package io.kanbanai.amtIntegration.model;
 
 import org.junit.Test;
 import static org.junit.Assert.*;

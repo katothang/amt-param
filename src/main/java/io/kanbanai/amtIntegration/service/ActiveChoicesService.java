@@ -1,8 +1,8 @@
-package io.kanbanai.paramsview.service;
+package io.kanbanai.amtIntegration.service;
 
 import hudson.model.ParameterDefinition;
-import io.kanbanai.paramsview.model.RenderedParameterInfo;
-import io.kanbanai.paramsview.model.ParameterInputType;
+import io.kanbanai.amtIntegration.model.RenderedParameterInfo;
+import io.kanbanai.amtIntegration.model.ParameterInputType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -12,14 +12,21 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 /**
- * Service chuyên xử lý Active Choices Plugin parameters
- * 
- * Service này được tách riêng để xử lý các tính năng của Active Choices Plugin
- * một cách an toàn, với khả năng graceful fallback khi plugin không khả dụng.
- * 
- * Tất cả các tương tác với Active Choices Plugin classes được thực hiện
- * thông qua reflection để tránh ClassNotFoundException khi plugin không có.
- * 
+ * Service specialized in handling Active Choices Plugin parameters.
+ *
+ * This service is separated to handle Active Choices Plugin features
+ * safely, with graceful fallback capability when the plugin is not available.
+ *
+ * All interactions with Active Choices Plugin classes are performed
+ * through reflection to avoid ClassNotFoundException when the plugin is absent.
+ *
+ * Flow:
+ * 1. Detects Active Choices parameter types using reflection
+ * 2. Extracts choices and dependencies from Active Choices parameters
+ * 3. Handles cascade parameters with dynamic choice generation
+ * 4. Provides fallback behavior when plugin classes are not available
+ * 5. Maintains type safety while working with unknown plugin classes
+ *
  * @author KanbanAI
  * @since 1.0.2
  */

@@ -1,9 +1,11 @@
-package io.kanbanai.paramsview.service;
+package io.kanbanai.amtIntegration.service;
 
 import hudson.model.*;
-import io.kanbanai.paramsview.model.RenderedParameterInfo;
-import io.kanbanai.paramsview.model.RenderedParametersInfo;
-import io.kanbanai.paramsview.model.ParameterInputType;
+import io.kanbanai.amtIntegration.model.RenderedParameterInfo;
+import io.kanbanai.amtIntegration.model.RenderedParametersInfo;
+import io.kanbanai.amtIntegration.model.ParameterInputType;
+import io.kanbanai.amtIntegration.config.MessageConstants;
+import io.kanbanai.amtIntegration.util.ValidationUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -12,15 +14,22 @@ import java.util.logging.Logger;
 import java.util.logging.Level;
 
 /**
- * Service chịu trách nhiệm render Jenkins parameters thành thông tin hiển thị
- * 
- * Service này xử lý việc chuyển đổi các ParameterDefinition của Jenkins
- * thành RenderedParameterInfo với đầy đủ thông tin cần thiết để hiển thị
- * trên UI, bao gồm cả built-in parameters và Active Choices parameters.
- * 
- * Service được thiết kế để hoạt động độc lập với Active Choices Plugin,
- * có thể gracefully fallback khi plugin không khả dụng.
- * 
+ * Service responsible for rendering Jenkins parameters into display information.
+ *
+ * This service handles the conversion of Jenkins ParameterDefinition objects
+ * into RenderedParameterInfo with complete information needed for UI display,
+ * including both built-in parameters and Active Choices parameters.
+ *
+ * The service is designed to operate independently of the Active Choices Plugin,
+ * with graceful fallback when the plugin is not available.
+ *
+ * Flow:
+ * 1. Receives job and current parameter values
+ * 2. Extracts all parameter definitions from the job
+ * 3. Renders each parameter with appropriate type and choices
+ * 4. Handles Active Choices parameters with dynamic content
+ * 5. Returns comprehensive parameter information for API response
+ *
  * @author KanbanAI
  * @since 1.0.2
  */
@@ -36,7 +45,7 @@ public class ParameterRenderingService {
     private final ActiveChoicesService activeChoicesService;
     
     /**
-     * Private constructor cho Singleton pattern
+     * Private constructor for Singleton pattern
      */
     private ParameterRenderingService() {
         this.pluginService = PluginAvailabilityService.getInstance();
@@ -56,90 +65,86 @@ public class ParameterRenderingService {
     }
     
     /**
-     * Render tất cả parameters của một Jenkins job
-     * 
-     * Method này lấy tất cả ParameterDefinition từ job và chuyển đổi
-     * thành RenderedParametersInfo với đầy đủ thông tin để hiển thị.
-     * 
-     * @param job Jenkins job cần render parameters
-     * @param currentValues Map các giá trị parameter hiện tại (cho cascade parameters)
-     * @return RenderedParametersInfo chứa thông tin đầy đủ của tất cả parameters
+     * Renders all parameters of a Jenkins job
+     *
+     * This method retrieves all ParameterDefinition from the job and converts
+     * them into RenderedParametersInfo with complete information for display.
+     *
+     * @param job Jenkins job to render parameters for
+     * @param currentValues Map of current parameter values (for cascade parameters)
+     * @return RenderedParametersInfo containing complete information of all parameters
      */
     public RenderedParametersInfo renderJobParameters(Job<?, ?> job, Map<String, String> currentValues) {
-        if (job == null) {
-            throw new IllegalArgumentException("Job không được null");
-        }
+        ValidationUtils.validateJob(job);
+
+        LOGGER.log(Level.INFO, String.format(MessageConstants.INFO_STARTING_PARAMETER_RENDERING, job.getFullName()));
         
-        LOGGER.log(Level.INFO, "Bắt đầu render parameters cho job: " + job.getFullName());
-        
-        // Tạo response object
+        // Create response object
         RenderedParametersInfo info = new RenderedParametersInfo(
             job.getName(),
             job.getFullName(),
             job.getUrl()
         );
-        
+
         // Set plugin availability information
         boolean activeChoicesAvailable = pluginService.isActiveChoicesPluginAvailable();
         info.setActiveChoicesPluginAvailable(activeChoicesAvailable);
         info.setActiveChoicesPluginVersion(pluginService.getActiveChoicesPluginVersion());
-        
+
         try {
-            // Lấy ParametersDefinitionProperty từ job
+            // Get ParametersDefinitionProperty from job
             ParametersDefinitionProperty paramsProp = job.getProperty(ParametersDefinitionProperty.class);
-            
+
             if (paramsProp == null) {
-                LOGGER.log(Level.INFO, "Job " + job.getFullName() + " không có parameters");
+                LOGGER.log(Level.INFO, "Job " + job.getFullName() + " has no parameters");
                 return info;
             }
-            
+
             List<ParameterDefinition> paramDefs = paramsProp.getParameterDefinitions();
             if (paramDefs == null || paramDefs.isEmpty()) {
-                LOGGER.log(Level.INFO, "Job " + job.getFullName() + " có ParametersDefinitionProperty nhưng không có parameter definitions");
+                LOGGER.log(Level.INFO, "Job " + job.getFullName() + " has ParametersDefinitionProperty but no parameter definitions");
                 return info;
             }
-            
-            LOGGER.log(Level.INFO, "Tìm thấy " + paramDefs.size() + " parameters trong job " + job.getFullName());
-            
-            // Render từng parameter
+
+            LOGGER.log(Level.INFO, String.format(MessageConstants.INFO_PARAMETERS_FOUND, paramDefs.size(), job.getFullName()));
+
+            // Render each parameter
             for (ParameterDefinition paramDef : paramDefs) {
                 try {
                     RenderedParameterInfo paramInfo = renderSingleParameter(paramDef, job, currentValues);
                     info.addParameter(paramInfo);
-                    
+
                 } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "Lỗi khi render parameter " + paramDef.getName() + ": " + e.getMessage(), e);
-                    
-                    // Tạo parameter info với error message thay vì skip
+                    LOGGER.log(Level.WARNING, String.format(MessageConstants.WARNING_PARAMETER_RENDER_ERROR, paramDef.getName(), e.getMessage()), e);
+
+                    // Create parameter info with error message instead of skipping
                     RenderedParameterInfo errorParam = createErrorParameter(paramDef, e.getMessage());
                     info.addParameter(errorParam);
                 }
             }
-            
-            LOGGER.log(Level.INFO, "Hoàn thành render " + info.getParameterCount() + " parameters cho job " + job.getFullName());
+
+            LOGGER.log(Level.INFO, String.format(MessageConstants.INFO_PARAMETER_RENDERING_COMPLETE, info.getParameterCount(), job.getFullName()));
             
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Lỗi nghiêm trọng khi render parameters cho job " + job.getFullName() + ": " + e.getMessage(), e);
-            throw new RuntimeException("Không thể render parameters cho job: " + e.getMessage(), e);
+            LOGGER.log(Level.SEVERE, String.format(MessageConstants.ERROR_CRITICAL_PARAMETER_RENDERING, job.getFullName(), e.getMessage()), e);
+            throw new RuntimeException(String.format(MessageConstants.ERROR_CANNOT_RENDER_PARAMETERS, job.getFullName()), e);
         }
         
         return info;
     }
     
     /**
-     * Render một parameter definition thành RenderedParameterInfo
-     * 
-     * @param paramDef ParameterDefinition cần render
-     * @param job Job chứa parameter (để context)
-     * @param currentValues Map các giá trị parameter hiện tại
-     * @return RenderedParameterInfo đã được render
+     * Renders a single parameter definition into RenderedParameterInfo
+     *
+     * @param paramDef ParameterDefinition to render
+     * @param job Job containing the parameter (for context)
+     * @param currentValues Map of current parameter values
+     * @return Rendered RenderedParameterInfo
      */
     public RenderedParameterInfo renderSingleParameter(ParameterDefinition paramDef, Job<?, ?> job, Map<String, String> currentValues) {
-        if (paramDef == null) {
-            throw new IllegalArgumentException("ParameterDefinition không được null");
-        }
-        
-        LOGGER.log(Level.FINE, "Render parameter: " + paramDef.getName() + " (type: " + paramDef.getClass().getSimpleName() + ")");
+        ValidationUtils.validateParameterDefinition(paramDef);
+
+        LOGGER.log(Level.FINE, String.format(MessageConstants.DEBUG_RENDERING_PARAMETER, paramDef.getName(), paramDef.getClass().getSimpleName()));
         
         // Tạo base parameter info
         RenderedParameterInfo paramInfo = new RenderedParameterInfo(
