@@ -21,21 +21,22 @@ import io.kanbanai.paramsview.model.RenderedParametersInfo;
 
 /**
  * Jenkins Job Action để thêm endpoint vào mỗi job URL
- * 
+ *
  * Action này sẽ được inject vào tất cả các Job objects trong Jenkins,
- * cho phép truy cập parameters thông qua URL pattern đơn giản:
- * {JENKINS_URL}/job/{JOB_NAME}?params=param1:value1,param2:value2
- * 
+ * cho phép truy cập parameters thông qua URL pattern:
+ * {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
+ *
  * Hoạt động:
- * - Plugin check query parameter "params" trên mọi request đến job
- * - Nếu có "params", trả về JSON với thông tin parameters
- * - Nếu không có "params", Jenkins xử lý bình thường
- * 
+ * - Plugin tạo endpoint /amt-integration/api cho mỗi job
+ * - Endpoint /amt-integration/ trả về thông tin hướng dẫn
+ * - Endpoint /amt-integration/api?params=... trả về JSON với thông tin parameters
+ *
  * Kiến trúc:
  * - Sử dụng TransientActionFactory để inject action vào mỗi job
- * - Sử dụng HTTP intercept pattern để check query params
+ * - doIndex() xử lý request tại /amt-integration/ (info endpoint)
+ * - doApi() xử lý request tại /amt-integration/api (parameters endpoint)
  * - Trả về JSON response với thông tin parameters
- * 
+ *
  * @author KanbanAI
  * @since 1.0.3
  */
@@ -78,26 +79,26 @@ public class RenderedParametersAction implements Action {
 
     /**
      * {@inheritDoc}
-     * 
-     * URL name là "api" để tạo endpoint: /job/{JOB_NAME}/api
-     * Sử dụng path "api" vì nó ngắn gọn và tuân theo REST convention
+     *
+     * URL name là "amt-integration" để tạo endpoint: /job/{JOB_NAME}/amt-integration
+     * Để hỗ trợ URL pattern: /job/{JOB_NAME}/amt-integration/api?params=...
      */
     @Override
     public String getUrlName() {
-        return "api";
+        return "amt-integration";
     }
 
     /**
-     * Xử lý request tại /job/{JOB_NAME}/api
+     * Xử lý request tại /job/{JOB_NAME}/amt-integration/api
      * với query parameter "params"
-     * 
-     * URL pattern: /job/{JOB_NAME}/api?params=param1:value1,param2:value2
-     * 
+     *
+     * URL pattern: /job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
+     *
      * @param req StaplerRequest
      * @param rsp StaplerResponse
      * @throws IOException nếu có lỗi I/O
      */
-    public void doIndex(StaplerRequest req, StaplerResponse rsp) throws IOException {
+    public void doApi(StaplerRequest req, StaplerResponse rsp) throws IOException {
         String paramsStr = req.getParameter("params");
         
         if (paramsStr == null) {
@@ -130,6 +131,32 @@ public class RenderedParametersAction implements Action {
             sendErrorResponse(rsp, 500, "Internal server error",
                 "An unexpected error occurred while processing the request");
         }
+    }
+
+    /**
+     * Xử lý request tại /job/{JOB_NAME}/amt-integration/
+     * Trả về thông tin hướng dẫn sử dụng API
+     *
+     * @param req StaplerRequest
+     * @param rsp StaplerResponse
+     * @throws IOException nếu có lỗi I/O
+     */
+    public void doIndex(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        rsp.setStatus(200);
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"success\":true,");
+        json.append("\"message\":\"AMT Parameters API\",");
+        json.append("\"usage\":\"Use /job/").append(job.getFullName()).append("/amt-integration/api?params=param1:value1,param2:value2\",");
+        json.append("\"jobName\":").append(jsonString(job.getFullName())).append(",");
+        json.append("\"endpoints\":{");
+        json.append("\"parameters\":\"").append(req.getRequestURL()).append("api?params=param1:value1,param2:value2\"");
+        json.append("}");
+        json.append("}");
+
+        rsp.getWriter().write(json.toString());
     }
 
     /**

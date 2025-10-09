@@ -44,19 +44,19 @@ mvn clean compile hpi:hpi -DskipTests
 Cách đơn giản nhất để lấy thông tin parameters:
 
 ```bash
-GET {JENKINS_URL}/job/{JOB_NAME}/api?params=param1:value1,param2:value2
+GET {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
 ```
 
 **Ví dụ:**
 ```bash
 # Lấy parameters của job AMT_param với Channel=C01
-curl "https://jenkins.thangnotes.dev/job/AMT_param/api?params=Channel:C01"
+curl "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api?params=Channel:C01"
 
 # Lấy tất cả parameters (không có current values)
-curl "https://jenkins.thangnotes.dev/job/AMT_param/api"
+curl "https://jenkins.thangnotes.dev/job/AMT_param/amt-integration/api"
 
 # Job trong folder
-curl "https://jenkins.thangnotes.dev/job/MyFolder/job/MyJob/api?params=param:value"
+curl "https://jenkins.thangnotes.dev/job/MyFolder/job/MyJob/amt-integration/api?params=param:value"
 ```
 
 ### Legacy REST API (Vẫn được hỗ trợ)

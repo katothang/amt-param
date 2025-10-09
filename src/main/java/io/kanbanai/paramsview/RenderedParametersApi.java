@@ -86,7 +86,7 @@ public class RenderedParametersApi implements RootAction {
      * API sẽ accessible tại: {JENKINS_URL}/amt-integration/
      * 
      * Note: Từ version 1.0.3+, nên sử dụng URL pattern mới:
-     * {JENKINS_URL}/job/{JOB_NAME}?params=param1:value1,param2:value2
+     * {JENKINS_URL}/job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
      * thông qua RenderedParametersAction
      *
      * @return URL path segment cho plugin
@@ -103,7 +103,7 @@ public class RenderedParametersApi implements RootAction {
      * cung cấp better separation of concerns và error handling.
      *
      * DEPRECATED: Sử dụng URL pattern mới thay thế:
-     * New: GET /job/{JOB_NAME}?params=param1:value1,param2:value2
+     * New: GET /job/{JOB_NAME}/amt-integration/api?params=param1:value1,param2:value2
      * Old: GET /amt-integration/get?job=https://jenkins.example.com/job/jobName/&params=param1:value1,param2:value2
      *
      * Cách sử dụng (Legacy - vẫn được hỗ trợ):
@@ -126,7 +126,7 @@ public class RenderedParametersApi implements RootAction {
             String jobUrl = req.getParameter("job");
             if (jobUrl == null || jobUrl.trim().isEmpty()) {
                 sendErrorResponse(rsp, 400, "Job parameter is required",
-                    "Usage: GET /amt-integration/get?job=https://jenkins.example.com/job/jobName/ (Legacy API - prefer using /job/{JOB_NAME}?params=... instead)");
+                    "Usage: GET /amt-integration/get?job=https://jenkins.example.com/job/jobName/ (Legacy API - prefer using /job/{JOB_NAME}/amt-integration/api?params=... instead)");
                 return;
             }
 
