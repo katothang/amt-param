@@ -44,7 +44,7 @@ public final class ValidationUtils {
     
     /**
      * Validates that a parameter definition is not null and has required fields.
-     * 
+     *
      * @param paramDef the parameter definition to validate
      * @throws IllegalArgumentException if parameter definition is invalid
      */
@@ -52,40 +52,9 @@ public final class ValidationUtils {
         if (paramDef == null) {
             throw new IllegalArgumentException(MessageConstants.ERROR_INVALID_PARAMETER_DEFINITION);
         }
-        
-        if (paramDef.getName() == null || paramDef.getName().trim().isEmpty()) {
-            throw new IllegalArgumentException(MessageConstants.VALIDATION_PARAMETER_NAME_REQUIRED);
-        }
-        
-        if (!isValidParameterName(paramDef.getName())) {
-            throw new IllegalArgumentException(
-                String.format(MessageConstants.VALIDATION_INVALID_FORMAT, "parameter name")
-            );
-        }
     }
-    
-    /**
-     * Validates parameter name according to naming conventions.
-     * 
-     * @param parameterName the parameter name to validate
-     * @return true if valid, false otherwise
-     */
-    public static boolean isValidParameterName(String parameterName) {
-        if (parameterName == null || parameterName.trim().isEmpty()) {
-            return false;
-        }
-        
-        String trimmed = parameterName.trim();
-        
-        // Check length
-        if (trimmed.length() > ValidationConstants.MAX_PARAMETER_NAME_LENGTH) {
-            return false;
-        }
-        
-        // Check pattern
-        return trimmed.matches(ValidationConstants.PARAMETER_NAME_PATTERN);
-    }
-    
+
+
     /**
      * Validates parameter description length and content.
      * 
@@ -99,20 +68,7 @@ public final class ValidationUtils {
         
         return description.length() <= ValidationConstants.MAX_PARAMETER_DESCRIPTION_LENGTH;
     }
-    
-    /**
-     * Validates parameter value length and content.
-     * 
-     * @param value the value to validate
-     * @return true if valid, false otherwise
-     */
-    public static boolean isValidParameterValue(String value) {
-        if (value == null) {
-            return true; // null values are acceptable
-        }
-        
-        return value.length() <= ValidationConstants.MAX_PARAMETER_VALUE_LENGTH;
-    }
+
     
     /**
      * Validates error message length.
@@ -127,90 +83,8 @@ public final class ValidationUtils {
         
         return errorMessage.length() <= ValidationConstants.MAX_ERROR_MESSAGE_LENGTH;
     }
-    
-    /**
-     * Validates that a list of choices is within acceptable limits.
-     * 
-     * @param choices the choices list to validate
-     * @return true if valid, false otherwise
-     */
-    public static boolean isValidChoicesList(List<String> choices) {
-        if (choices == null) {
-            return true; // null choices are acceptable
-        }
-        
-        if (choices.size() > ValidationConstants.MAX_CHOICES_COUNT) {
-            return false;
-        }
-        
-        // Validate each choice
-        for (String choice : choices) {
-            if (!isValidParameterValue(choice)) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Validates that a list of dependencies is within acceptable limits.
-     * 
-     * @param dependencies the dependencies list to validate
-     * @return true if valid, false otherwise
-     */
-    public static boolean isValidDependenciesList(List<String> dependencies) {
-        if (dependencies == null) {
-            return true; // null dependencies are acceptable
-        }
-        
-        if (dependencies.size() > ValidationConstants.MAX_DEPENDENCIES_COUNT) {
-            return false;
-        }
-        
-        // Validate each dependency name
-        for (String dependency : dependencies) {
-            if (!isValidParameterName(dependency)) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Checks if a parameter type is sensitive and should not expose values.
-     * 
-     * @param parameterType the parameter type to check
-     * @return true if sensitive, false otherwise
-     */
-    public static boolean isSensitiveParameterType(String parameterType) {
-        if (parameterType == null) {
-            return false;
-        }
-        
-        for (String sensitiveType : ValidationConstants.SENSITIVE_PARAMETER_TYPES) {
-            if (parameterType.contains(sensitiveType)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Validates job name format.
-     * 
-     * @param jobName the job name to validate
-     * @return true if valid, false otherwise
-     */
-    public static boolean isValidJobName(String jobName) {
-        if (jobName == null || jobName.trim().isEmpty()) {
-            return false;
-        }
-        
-        return jobName.matches(ValidationConstants.JOB_NAME_PATTERN);
-    }
+
+
     
     /**
      * Sanitizes a string for safe usage in logs and error messages.

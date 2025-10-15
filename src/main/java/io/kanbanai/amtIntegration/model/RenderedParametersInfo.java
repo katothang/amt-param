@@ -96,9 +96,6 @@ public class RenderedParametersInfo {
     
     public void setJobName(String jobName) {
         ValidationUtils.requireNonEmpty(jobName, "jobName");
-        if (!ValidationUtils.isValidJobName(jobName)) {
-            throw new IllegalArgumentException("Invalid job name format: " + jobName);
-        }
         this.jobName = jobName;
     }
     

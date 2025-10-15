@@ -39,11 +39,6 @@ public class ActiveChoicesService {
     
     // Active Choices class names (để sử dụng với reflection)
     private static final String ABSTRACT_SCRIPTABLE_PARAMETER = "org.biouno.unochoice.AbstractScriptableParameter";
-    private static final String CHOICE_PARAMETER = "org.biouno.unochoice.ChoiceParameter";
-    private static final String CASCADE_CHOICE_PARAMETER = "org.biouno.unochoice.CascadeChoiceParameter";
-    private static final String DYNAMIC_REFERENCE_PARAMETER = "org.biouno.unochoice.DynamicReferenceParameter";
-    private static final String SCRIPT_CLASS = "org.biouno.unochoice.model.Script";
-    
     /**
      * Private constructor cho Singleton pattern
      */
@@ -74,7 +69,7 @@ public class ActiveChoicesService {
      */
     public void renderActiveChoicesParameter(ParameterDefinition paramDef, RenderedParameterInfo paramInfo, Map<String, String> currentValues) {
         if (paramDef == null || paramInfo == null) {
-            throw new IllegalArgumentException("ParameterDefinition và RenderedParameterInfo không được null");
+            return;
         }
         
         String className = paramDef.getClass().getName();
@@ -93,6 +88,10 @@ public class ActiveChoicesService {
             // Lấy dependencies (referenced parameters)
             List<String> dependencies = getDependenciesFromActiveChoicesParameter(paramDef);
             paramInfo.setDependencies(dependencies);
+
+            // Lấy choice type từ Active Choices parameter
+            String choiceType = getChoiceTypeFromActiveChoicesParameter(paramDef);
+            paramInfo.setChoiceType(choiceType);
 
             // Xử lý khác nhau cho DynamicReferenceParameter vs các loại khác
             if (className.contains("DynamicReferenceParameter")) {
@@ -119,7 +118,6 @@ public class ActiveChoicesService {
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Lỗi khi render Active Choices parameter " + paramDef.getName() + ": " + e.getMessage(), e);
-            throw new RuntimeException("Không thể render Active Choices parameter: " + e.getMessage(), e);
         }
     }
     
@@ -238,7 +236,25 @@ public class ActiveChoicesService {
         
         return dependencies;
     }
-    
+
+    /**
+     * Lấy choice type từ Active Choices parameter
+     */
+    private String getChoiceTypeFromActiveChoicesParameter(ParameterDefinition paramDef) {
+        try {
+            // Thử lấy choice type từ method getChoiceType()
+            Object choiceType = invokeMethod(paramDef, "getChoiceType");
+            if (choiceType != null) {
+                return choiceType.toString();
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Không thể lấy choice type từ Active Choices parameter: " + e.getMessage());
+        }
+
+        return null;
+    }
+
     /**
      * Chuẩn hóa kết quả choices từ nhiều định dạng khác nhau về List<String>
      */

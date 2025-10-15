@@ -92,6 +92,13 @@ public class RenderedParameterInfo {
     private String data;
 
     /**
+     * Choice type for Active Choices parameters
+     * Examples: "PT_SINGLE_SELECT", "PT_CHECKBOX", "ET_FORMATTED_HTML"
+     * Only used for Active Choices Plugin parameters
+     */
+    private String choiceType;
+
+    /**
      * Default constructor
      */
     public RenderedParameterInfo() {
@@ -123,10 +130,7 @@ public class RenderedParameterInfo {
     }
     
     public void setName(String name) {
-        ValidationUtils.requireNonEmpty(name, "name");
-        if (!ValidationUtils.isValidParameterName(name)) {
-            throw new IllegalArgumentException("Invalid parameter name format: " + name);
-        }
+        // No validation - accept any parameter name from Jenkins config
         this.name = name;
     }
     
@@ -154,9 +158,6 @@ public class RenderedParameterInfo {
     }
     
     public void setCurrentValue(String currentValue) {
-        if (currentValue != null && !ValidationUtils.isValidParameterValue(currentValue)) {
-            throw new IllegalArgumentException("Parameter value too long");
-        }
         this.currentValue = currentValue;
     }
     
@@ -173,9 +174,6 @@ public class RenderedParameterInfo {
     }
     
     public void setChoices(List<String> choices) {
-        if (choices != null && !ValidationUtils.isValidChoicesList(choices)) {
-            throw new IllegalArgumentException("Invalid choices list");
-        }
         this.choices = choices != null ? choices : new ArrayList<>();
     }
     
@@ -195,9 +193,6 @@ public class RenderedParameterInfo {
     }
 
     public void setDependencies(List<String> dependencies) {
-        if (dependencies != null && !ValidationUtils.isValidDependenciesList(dependencies)) {
-            throw new IllegalArgumentException("Invalid dependencies list");
-        }
         this.dependencies = dependencies != null ? dependencies : new ArrayList<>();
     }
 
@@ -209,9 +204,6 @@ public class RenderedParameterInfo {
     public void addDependency(String dependency) {
         if (dependency != null && !dependency.trim().isEmpty()) {
             String trimmed = dependency.trim();
-            if (!ValidationUtils.isValidParameterName(trimmed)) {
-                throw new IllegalArgumentException("Invalid dependency name: " + trimmed);
-            }
             this.dependencies.add(trimmed);
         }
     }
@@ -251,6 +243,14 @@ public class RenderedParameterInfo {
         this.data = data;
     }
 
+    public String getChoiceType() {
+        return choiceType;
+    }
+
+    public void setChoiceType(String choiceType) {
+        this.choiceType = choiceType;
+    }
+
     /**
      * Checks whether the parameter has choices
      *
@@ -288,6 +288,15 @@ public class RenderedParameterInfo {
     }
 
     /**
+     * Checks whether the parameter has a choice type
+     *
+     * @return true if has choice type, false otherwise
+     */
+    public boolean hasChoiceType() {
+        return choiceType != null && !choiceType.trim().isEmpty();
+    }
+
+    /**
      * Converts object to JSON string
      *
      * @return JSON string representation of the object
@@ -321,7 +330,10 @@ public class RenderedParameterInfo {
         // Data field for DynamicReferenceParameter
         // Clean data if it only contains "[]" or "[][]"
         String cleanedData = JsonUtils.cleanDataField(data);
-        sb.append("\"data\":").append(JsonUtils.toJsonString(cleanedData));
+        sb.append("\"data\":").append(JsonUtils.toJsonString(cleanedData)).append(",");
+
+        // Choice type for Active Choices parameters
+        sb.append("\"choiceType\":").append(JsonUtils.toJsonString(choiceType));
 
         sb.append("}");
         return sb.toString();
@@ -340,6 +352,7 @@ public class RenderedParameterInfo {
                 ", choicesCount=" + (choices != null ? choices.size() : 0) +
                 ", dependenciesCount=" + (dependencies != null ? dependencies.size() : 0) +
                 ", hasData=" + (data != null && !data.trim().isEmpty()) +
+                ", choiceType='" + choiceType + '\'' +
                 '}';
     }
 
@@ -460,6 +473,17 @@ public class RenderedParameterInfo {
          */
         public Builder data(String data) {
             this.parameterInfo.setData(data);
+            return this;
+        }
+
+        /**
+         * Sets the choice type.
+         *
+         * @param choiceType Choice type for Active Choices parameters
+         * @return this builder
+         */
+        public Builder choiceType(String choiceType) {
+            this.parameterInfo.setChoiceType(choiceType);
             return this;
         }
 

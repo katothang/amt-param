@@ -180,10 +180,6 @@ public class ParametersApiController implements RootAction {
      * @return the job if found, null otherwise
      */
     private Job<?, ?> findJobByName(String jobName) {
-        if (!ValidationUtils.isValidJobName(jobName)) {
-            return null;
-        }
-        
         Jenkins jenkins = Jenkins.get();
         return jenkins.getItemByFullName(jobName, Job.class);
     }

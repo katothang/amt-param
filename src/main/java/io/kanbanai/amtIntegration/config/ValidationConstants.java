@@ -51,9 +51,10 @@ public final class ValidationConstants {
     // ========== Validation Patterns ==========
     
     /**
-     * Pattern for valid parameter names (alphanumeric, underscore, hyphen)
+     * Pattern for valid parameter names (Unicode letters, digits, underscore, hyphen)
+     * Supports international characters including Vietnamese, Chinese, etc.
      */
-    public static final String PARAMETER_NAME_PATTERN = "^[a-zA-Z0-9_-]+$";
+    public static final String PARAMETER_NAME_PATTERN = "^[\\p{L}\\p{N}_-]+$";
     
     /**
      * Pattern for valid job names
