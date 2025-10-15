@@ -11,7 +11,7 @@
 
   <groupId>io.kanbanai</groupId>
   <artifactId>amt-integration</artifactId>
-  <version>1.0.2</version>
+  <version>1.0.3</version>
   <packaging>hpi</packaging>
   <name>amt-integration</name>
   <description>Plugin tích hợp với jenkins để truy xuất thông tin parammeter của jenkins dự án AMT - Kanban team</description>
