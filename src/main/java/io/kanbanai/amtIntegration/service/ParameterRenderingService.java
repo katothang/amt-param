@@ -234,34 +234,34 @@ public class ParameterRenderingService {
             if (paramDef instanceof ChoiceParameterDefinition) {
                 // Choice Parameter: dropdown với các lựa chọn cố định
                 ChoiceParameterDefinition choiceDef = (ChoiceParameterDefinition) paramDef;
-                paramInfo.setChoices(new ArrayList<>(choiceDef.getChoices()));
+                paramInfo.setChoicesFromStrings(new ArrayList<>(choiceDef.getChoices()));
                 paramInfo.setInputType(ParameterInputType.SELECT);
-                
+
             } else if (paramDef instanceof BooleanParameterDefinition) {
                 // Boolean Parameter: checkbox true/false
                 List<String> boolChoices = new ArrayList<>();
                 boolChoices.add("true");
                 boolChoices.add("false");
-                paramInfo.setChoices(boolChoices);
+                paramInfo.setChoicesFromStrings(boolChoices);
                 paramInfo.setInputType(ParameterInputType.CHECKBOX);
-                
+
             } else if (paramDef instanceof TextParameterDefinition) {
                 // Text Parameter: textarea cho text nhiều dòng
                 paramInfo.setInputType(ParameterInputType.TEXTAREA);
-                
+
             } else if (paramDef instanceof PasswordParameterDefinition) {
                 // Password Parameter: input password
                 paramInfo.setInputType(ParameterInputType.PASSWORD);
-                
+
             } else if (paramDef instanceof StringParameterDefinition) {
                 // String Parameter: input text đơn giản
                 paramInfo.setInputType(ParameterInputType.TEXT);
-                
+
             } else {
                 // Other built-in types
                 paramInfo.setInputType(ParameterInputType.TEXT);
             }
-            
+
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Lỗi khi render built-in parameter " + paramDef.getName() + ": " + e.getMessage());
             paramInfo.setErrorMessage("Lỗi khi render parameter: " + e.getMessage());

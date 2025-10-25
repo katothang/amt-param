@@ -2,6 +2,8 @@ package io.kanbanai.amtIntegration.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import io.kanbanai.amtIntegration.util.ValidationUtils;
@@ -60,14 +62,27 @@ public class RenderedParameterInfo {
     /**
      * List of available choices (for dropdown, radio, checkbox)
      * Empty if parameter has no fixed choices
+     * Each choice is a Map with "key" and "value" entries
+     * For simple choices, key and value are the same
      */
-    private List<String> choices;
+    private List<Map<String, String>> choices;
 
     /**
      * List of parameter names that this parameter depends on
      * Used for Cascade Choice Parameter or Dynamic Reference Parameter
      */
     private List<String> dependencies;
+
+    /**
+     * Raw Groovy script content for Active Choices parameters
+     * Contains the original script code before evaluation
+     */
+    private String rawScript;
+
+    /**
+     * Indicates whether the raw script runs in sandbox mode
+     */
+    private Boolean rawScriptSandbox;
     
     /**
      * True if this parameter is dynamic (Active Choices Plugin)
@@ -169,22 +184,61 @@ public class RenderedParameterInfo {
         this.inputType = inputType != null ? inputType : ParameterInputType.TEXT;
     }
     
-    public List<String> getChoices() {
+    public List<Map<String, String>> getChoices() {
         return choices;
     }
-    
-    public void setChoices(List<String> choices) {
+
+    public void setChoices(List<Map<String, String>> choices) {
         this.choices = choices != null ? choices : new ArrayList<>();
     }
-    
+
     /**
-     * Adds a choice to the list
+     * Sets choices from a list of strings (for backward compatibility)
+     * Converts each string to a Map with key=value=string
+     *
+     * @param stringChoices List of choice strings
+     */
+    public void setChoicesFromStrings(List<String> stringChoices) {
+        this.choices = new ArrayList<>();
+        if (stringChoices != null) {
+            for (String choice : stringChoices) {
+                if (choice != null) {
+                    Map<String, String> choiceMap = new HashMap<>();
+                    choiceMap.put("key", choice);
+                    choiceMap.put("value", choice);
+                    this.choices.add(choiceMap);
+                }
+            }
+        }
+    }
+
+    /**
+     * Adds a choice to the list (for backward compatibility)
+     * Creates a Map with key=value=choice
      *
      * @param choice Choice to add
      */
     public void addChoice(String choice) {
         if (choice != null) {
-            this.choices.add(choice);
+            Map<String, String> choiceMap = new HashMap<>();
+            choiceMap.put("key", choice);
+            choiceMap.put("value", choice);
+            this.choices.add(choiceMap);
+        }
+    }
+
+    /**
+     * Adds a choice with separate key and value
+     *
+     * @param key Choice key
+     * @param value Choice value
+     */
+    public void addChoice(String key, String value) {
+        if (key != null && value != null) {
+            Map<String, String> choiceMap = new HashMap<>();
+            choiceMap.put("key", key);
+            choiceMap.put("value", value);
+            this.choices.add(choiceMap);
         }
     }
 
@@ -249,6 +303,22 @@ public class RenderedParameterInfo {
 
     public void setChoiceType(String choiceType) {
         this.choiceType = choiceType;
+    }
+
+    public String getRawScript() {
+        return rawScript;
+    }
+
+    public void setRawScript(String rawScript) {
+        this.rawScript = rawScript;
+    }
+
+    public Boolean getRawScriptSandbox() {
+        return rawScriptSandbox;
+    }
+
+    public void setRawScriptSandbox(Boolean rawScriptSandbox) {
+        this.rawScriptSandbox = rawScriptSandbox;
     }
 
     /**
@@ -325,7 +395,7 @@ public class RenderedParameterInfo {
 
         // Arrays
         sb.append("\"dependencies\":").append(JsonUtils.toJsonArray(dependencies)).append(",");
-        sb.append("\"choices\":").append(JsonUtils.toJsonArray(choices)).append(",");
+        sb.append("\"choices\":").append(JsonUtils.toJsonChoicesArray(choices)).append(",");
 
         // Data field for DynamicReferenceParameter
         // Clean data if it only contains "[]" or "[][]"
@@ -333,7 +403,11 @@ public class RenderedParameterInfo {
         sb.append("\"data\":").append(JsonUtils.toJsonString(cleanedData)).append(",");
 
         // Choice type for Active Choices parameters
-        sb.append("\"choiceType\":").append(JsonUtils.toJsonString(choiceType));
+        sb.append("\"choiceType\":").append(JsonUtils.toJsonString(choiceType)).append(",");
+
+        // Raw script for Active Choices parameters
+        sb.append("\"rawScript\":").append(JsonUtils.toJsonString(rawScript)).append(",");
+        sb.append("\"rawScriptSandbox\":").append(rawScriptSandbox != null ? JsonUtils.toJsonBoolean(rawScriptSandbox) : "null");
 
         sb.append("}");
         return sb.toString();
@@ -417,7 +491,7 @@ public class RenderedParameterInfo {
          * @return this builder
          */
         public Builder choices(List<String> choices) {
-            this.parameterInfo.setChoices(choices);
+            this.parameterInfo.setChoicesFromStrings(choices);
             return this;
         }
 

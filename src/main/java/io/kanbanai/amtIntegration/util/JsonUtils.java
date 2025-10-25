@@ -4,6 +4,7 @@ import io.kanbanai.amtIntegration.config.ValidationConstants;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
 
 /**
  * Utility class for JSON operations and string escaping.
@@ -186,7 +187,7 @@ public final class JsonUtils {
     
     /**
      * Creates a simple JSON object with key-value pairs.
-     * 
+     *
      * @param pairs alternating key-value pairs (key1, value1, key2, value2, ...)
      * @return JSON object string
      */
@@ -194,21 +195,53 @@ public final class JsonUtils {
         if (pairs.length % 2 != 0) {
             throw new IllegalArgumentException("Pairs must be even number of arguments");
         }
-        
+
         StringBuilder sb = new StringBuilder("{");
-        
+
         for (int i = 0; i < pairs.length; i += 2) {
             if (i > 0) {
                 sb.append(",");
             }
-            
+
             String key = pairs[i];
             String value = pairs[i + 1];
-            
+
             sb.append(toJsonString(key)).append(":").append(toJsonString(value));
         }
-        
+
         sb.append("}");
+        return sb.toString();
+    }
+
+    /**
+     * Converts a list of maps (choices with key-value) to JSON array format.
+     * Each map should have "key" and "value" entries.
+     *
+     * @param choices the list of choice maps to convert, can be null
+     * @return JSON array string representation
+     */
+    public static String toJsonChoicesArray(List<Map<String, String>> choices) {
+        if (choices == null || choices.isEmpty()) {
+            return "[]";
+        }
+
+        StringBuilder sb = new StringBuilder("[");
+
+        for (int i = 0; i < choices.size(); i++) {
+            Map<String, String> choice = choices.get(i);
+            if (choice != null) {
+                sb.append("{");
+                sb.append("\"key\":").append(toJsonString(choice.get("key"))).append(",");
+                sb.append("\"value\":").append(toJsonString(choice.get("value")));
+                sb.append("}");
+
+                if (i < choices.size() - 1) {
+                    sb.append(",");
+                }
+            }
+        }
+
+        sb.append("]");
         return sb.toString();
     }
 }

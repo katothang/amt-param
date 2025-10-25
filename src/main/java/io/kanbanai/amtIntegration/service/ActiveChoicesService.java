@@ -6,6 +6,7 @@ import io.kanbanai.amtIntegration.model.ParameterInputType;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -93,6 +94,13 @@ public class ActiveChoicesService {
             String choiceType = getChoiceTypeFromActiveChoicesParameter(paramDef);
             paramInfo.setChoiceType(choiceType);
 
+            // Lấy raw script từ Active Choices parameter
+            Map<String, Object> scriptInfo = getRawScriptFromActiveChoicesParameter(paramDef);
+            if (scriptInfo != null) {
+                paramInfo.setRawScript((String) scriptInfo.get("script"));
+                paramInfo.setRawScriptSandbox((Boolean) scriptInfo.get("sandbox"));
+            }
+
             // Xử lý khác nhau cho DynamicReferenceParameter vs các loại khác
             if (className.contains("DynamicReferenceParameter")) {
                 // Đối với DynamicReferenceParameter, lưu HTML content vào field 'data'
@@ -110,10 +118,10 @@ public class ActiveChoicesService {
                           " with HTML data and " + dependencies.size() + " dependencies");
             } else {
                 // Đối với ChoiceParameter và CascadeChoiceParameter, lưu vào field 'choices'
-                List<String> choices = getChoicesFromActiveChoicesParameter(paramDef, currentValues);
-                paramInfo.setChoices(choices);
+                Object choicesResult = getChoicesObjectFromActiveChoicesParameter(paramDef, currentValues);
+                populateChoicesFromResult(paramInfo, choicesResult);
                 LOGGER.log(Level.FINE, "Successfully rendered Active Choices parameter " + paramDef.getName() +
-                          " with " + choices.size() + " choices and " + dependencies.size() + " dependencies");
+                          " with choices and " + dependencies.size() + " dependencies");
             }
             
         } catch (Exception e) {
@@ -122,95 +130,194 @@ public class ActiveChoicesService {
     }
     
     /**
-     * Lấy choices từ Active Choices parameter sử dụng reflection
-     * 
+     * Lấy choices object từ Active Choices parameter sử dụng reflection
+     * Trả về raw object (có thể là List, Map, etc.) để preserve key-value pairs
+     *
+     * @param paramDef ParameterDefinition
+     * @param currentValues Map các giá trị parameter hiện tại
+     * @return Object chứa choices (List, Map, etc.)
+     */
+    private Object getChoicesObjectFromActiveChoicesParameter(ParameterDefinition paramDef, Map<String, String> currentValues) {
+        try {
+            // Kiểm tra xem parameter có phải là AbstractScriptableParameter không
+            if (isInstanceOf(paramDef, ABSTRACT_SCRIPTABLE_PARAMETER)) {
+                Object result = getChoicesObjectFromScript(paramDef, currentValues);
+                if (result != null) {
+                    return result;
+                }
+            }
+
+            // Nếu không lấy được từ script, thử các method khác
+            return getChoicesObjectFromFallbackMethods(paramDef, currentValues);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Lỗi khi lấy choices từ Active Choices parameter: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    /**
+     * Lấy choices từ Active Choices parameter sử dụng reflection (backward compatibility)
+     *
      * @param paramDef ParameterDefinition
      * @param currentValues Map các giá trị parameter hiện tại
      * @return List các choices
      */
     private List<String> getChoicesFromActiveChoicesParameter(ParameterDefinition paramDef, Map<String, String> currentValues) {
-        List<String> choices = new ArrayList<>();
-        
-        try {
-            // Kiểm tra xem parameter có phải là AbstractScriptableParameter không
-            if (isInstanceOf(paramDef, ABSTRACT_SCRIPTABLE_PARAMETER)) {
-                choices = getChoicesFromScript(paramDef, currentValues);
-            }
-            
-            // Nếu không lấy được từ script, thử các method khác
-            if (choices.isEmpty()) {
-                choices = getChoicesFromFallbackMethods(paramDef, currentValues);
-            }
-            
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Lỗi khi lấy choices từ Active Choices parameter: " + e.getMessage());
-        }
-        
-        return choices;
+        Object choicesObject = getChoicesObjectFromActiveChoicesParameter(paramDef, currentValues);
+        return normalizeChoicesResult(choicesObject);
     }
     
     /**
-     * Lấy choices từ script của AbstractScriptableParameter
+     * Lấy choices object từ script của AbstractScriptableParameter
      */
-    private List<String> getChoicesFromScript(ParameterDefinition paramDef, Map<String, String> currentValues) {
+    private Object getChoicesObjectFromScript(ParameterDefinition paramDef, Map<String, String> currentValues) {
         try {
             // Lấy Script object từ parameter
             Object script = invokeMethod(paramDef, "getScript");
             if (script == null) {
-                return new ArrayList<>();
+                return null;
             }
-            
+
             // Gọi script.eval() với currentValues
-            Object scriptResult = invokeMethod(script, "eval", Map.class, currentValues);
-            
-            // Normalize kết quả về List<String>
-            return normalizeChoicesResult(scriptResult);
-            
+            return invokeMethod(script, "eval", Map.class, currentValues);
+
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Không thể lấy choices từ script: " + e.getMessage());
-            return new ArrayList<>();
+            return null;
         }
     }
     
     /**
-     * Lấy choices từ các fallback methods khác
+     * Lấy choices object từ các fallback methods khác
      */
-    private List<String> getChoicesFromFallbackMethods(ParameterDefinition paramDef, Map<String, String> currentValues) {
-        List<String> choices = new ArrayList<>();
-        
+    private Object getChoicesObjectFromFallbackMethods(ParameterDefinition paramDef, Map<String, String> currentValues) {
         // Thử method getChoices(Map)
         try {
             Object result = invokeMethod(paramDef, "getChoices", Map.class, currentValues);
-            choices = normalizeChoicesResult(result);
-            if (!choices.isEmpty()) {
-                return choices;
+            if (result != null) {
+                return result;
             }
         } catch (Exception e) {
             // Method không tồn tại hoặc lỗi
         }
-        
+
         // Thử method getChoices()
         try {
             Object result = invokeMethod(paramDef, "getChoices");
-            choices = normalizeChoicesResult(result);
-            if (!choices.isEmpty()) {
-                return choices;
+            if (result != null) {
+                return result;
             }
         } catch (Exception e) {
             // Method không tồn tại hoặc lỗi
         }
-        
+
         // Thử method getChoicesForUI()
         try {
             Object result = invokeMethod(paramDef, "getChoicesForUI");
-            choices = normalizeChoicesResult(result);
+            if (result != null) {
+                return result;
+            }
         } catch (Exception e) {
             // Method không tồn tại hoặc lỗi
         }
-        
-        return choices;
+
+        return new ArrayList<>();
     }
     
+    /**
+     * Populate choices vào RenderedParameterInfo từ result object
+     * Xử lý đúng Map để preserve key-value pairs
+     */
+    private void populateChoicesFromResult(RenderedParameterInfo paramInfo, Object result) {
+        if (result == null) {
+            return;
+        }
+
+        // Nếu là Map, xử lý để lấy key-value pairs
+        if (result instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) result;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    // Trong Active Choices: key = value của HTML option, value = display text
+                    paramInfo.addChoice(entry.getKey().toString(), entry.getValue().toString());
+                }
+            }
+        }
+        // Nếu là List hoặc Collection
+        else if (result instanceof List) {
+            List<?> list = (List<?>) result;
+            for (Object item : list) {
+                if (item != null) {
+                    // Nếu item là Map.Entry, xử lý như key-value
+                    if (item instanceof Map.Entry) {
+                        Map.Entry<?, ?> entry = (Map.Entry<?, ?>) item;
+                        if (entry.getKey() != null && entry.getValue() != null) {
+                            paramInfo.addChoice(entry.getKey().toString(), entry.getValue().toString());
+                        }
+                    } else {
+                        // Nếu là string thông thường, key = value
+                        paramInfo.addChoice(item.toString());
+                    }
+                }
+            }
+        }
+        // Nếu là Collection khác
+        else if (result instanceof Collection) {
+            Collection<?> collection = (Collection<?>) result;
+            for (Object item : collection) {
+                if (item != null) {
+                    paramInfo.addChoice(item.toString());
+                }
+            }
+        }
+        // Nếu là Array
+        else if (result.getClass().isArray()) {
+            int length = java.lang.reflect.Array.getLength(result);
+            for (int i = 0; i < length; i++) {
+                Object item = java.lang.reflect.Array.get(result, i);
+                if (item != null) {
+                    paramInfo.addChoice(item.toString());
+                }
+            }
+        }
+        // Nếu là ListBoxModel (Jenkins)
+        else if (result.getClass().getName().contains("ListBoxModel")) {
+            try {
+                // ListBoxModel có method iterator()
+                Object iterator = invokeMethod(result, "iterator");
+                if (iterator instanceof java.util.Iterator) {
+                    java.util.Iterator<?> iter = (java.util.Iterator<?>) iterator;
+                    while (iter.hasNext()) {
+                        Object option = iter.next();
+                        if (option != null) {
+                            // ListBoxModel.Option có name (display) và value
+                            try {
+                                String value = (String) invokeMethod(option, "value");
+                                String name = (String) invokeMethod(option, "name");
+                                if (value != null && name != null) {
+                                    paramInfo.addChoice(value, name);
+                                } else if (value != null) {
+                                    paramInfo.addChoice(value);
+                                }
+                            } catch (Exception e) {
+                                paramInfo.addChoice(option.toString());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Không thể parse ListBoxModel: " + e.getMessage());
+                // Fallback: convert to string
+                paramInfo.addChoice(result.toString());
+            }
+        }
+        // Fallback: convert to string
+        else {
+            paramInfo.addChoice(result.toString());
+        }
+    }
+
     /**
      * Lấy dependencies từ Active Choices parameter
      */
@@ -250,6 +357,56 @@ public class ActiveChoicesService {
 
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Không thể lấy choice type từ Active Choices parameter: " + e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Lấy raw groovy script từ Active Choices parameter
+     *
+     * @param paramDef ParameterDefinition
+     * @return Map chứa "script" (String) và "sandbox" (Boolean), hoặc null nếu không lấy được
+     */
+    private Map<String, Object> getRawScriptFromActiveChoicesParameter(ParameterDefinition paramDef) {
+        try {
+            // Lấy Script object từ parameter
+            Object script = invokeMethod(paramDef, "getScript");
+            if (script == null) {
+                return null;
+            }
+
+            Map<String, Object> result = new HashMap<>();
+
+            // Lấy SecureScript object từ Script
+            try {
+                Object secureScript = invokeMethod(script, "getSecureScript");
+                if (secureScript != null) {
+                    // Lấy script content
+                    Object scriptContent = invokeMethod(secureScript, "getScript");
+                    if (scriptContent != null) {
+                        result.put("script", scriptContent.toString());
+                    }
+
+                    // Lấy sandbox flag
+                    try {
+                        Object sandbox = invokeMethod(secureScript, "isSandbox");
+                        if (sandbox instanceof Boolean) {
+                            result.put("sandbox", (Boolean) sandbox);
+                        }
+                    } catch (Exception e) {
+                        // Không có sandbox method hoặc lỗi
+                        result.put("sandbox", null);
+                    }
+
+                    return result;
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Không thể lấy SecureScript: " + e.getMessage());
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Không thể lấy raw script từ Active Choices parameter: " + e.getMessage());
         }
 
         return null;
