@@ -1,6 +1,7 @@
 package io.kanbanai.amtIntegration.service;
 
 import hudson.model.Run;
+import hudson.model.Result;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterValue;
 import io.kanbanai.amtIntegration.model.StageInfo;
@@ -13,14 +14,29 @@ import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.jenkinsci.plugins.workflow.support.steps.input.InputAction;
 import org.jenkinsci.plugins.workflow.support.steps.input.InputStepExecution;
 import org.jenkinsci.plugins.workflow.support.steps.input.InputStep;
+import org.jenkinsci.plugins.workflow.graph.FlowNode;
+import org.jenkinsci.plugins.workflow.graph.FlowGraphWalker;
+import org.jenkinsci.plugins.workflow.actions.LabelAction;
+import org.jenkinsci.plugins.workflow.actions.TimingAction;
+import org.jenkinsci.plugins.workflow.actions.LogAction;
+import org.jenkinsci.plugins.workflow.cps.nodes.StepStartNode;
+
+// Pipeline REST API plugin imports
+import com.cloudbees.workflow.rest.external.StageNodeExt;
+import com.cloudbees.workflow.rest.external.StatusExt;
+import com.cloudbees.workflow.rest.external.RunExt;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 
 /**
  * Service specialized in handling Jenkins Workflow/Pipeline stages and input steps.
@@ -940,7 +956,7 @@ public class WorkflowStageService {
     
     /**
      * Gets the build URL
-     * 
+     *
      * @param run Jenkins build run
      * @return Build URL
      */
@@ -956,6 +972,565 @@ public class WorkflowStageService {
             LOGGER.log(Level.WARNING, "Could not get build URL: " + e.getMessage());
             return "";
         }
+    }
+
+    /**
+     * Retrieves all stages information including logs for a build
+     *
+     * @param run Jenkins build run
+     * @return StagesInfo containing all stage information with logs
+     */
+    public StagesInfo getAllStagesWithLogs(Run<?, ?> run) {
+        StagesInfo stagesInfo = new StagesInfo();
+
+        if (run == null) {
+            LOGGER.log(Level.WARNING, "Run is null");
+            return stagesInfo;
+        }
+
+        // Set basic build information
+        stagesInfo.setJobName(run.getParent().getName());
+        stagesInfo.setJobFullName(run.getParent().getFullName());
+        stagesInfo.setBuildNumber(run.getNumber());
+        stagesInfo.setBuildUrl(getBuildUrl(run));
+        stagesInfo.setRunning(!run.hasntStartedYet() && run.isBuilding());
+
+        // Set build status
+        if (run.isBuilding()) {
+            stagesInfo.setBuildStatus("RUNNING");
+        } else if (run.getResult() != null) {
+            stagesInfo.setBuildStatus(run.getResult().toString());
+        } else {
+            stagesInfo.setBuildStatus("UNKNOWN");
+        }
+
+        // Check if this is a WorkflowRun (Pipeline job)
+        if (!isWorkflowRun(run)) {
+            LOGGER.log(Level.FINE, "Build is not a WorkflowRun, no stages to retrieve");
+            return stagesInfo;
+        }
+
+        try {
+            // Get all stages from the workflow graph
+            List<StageInfo> stages = getAllStagesFromGraph((WorkflowRun) run);
+            stagesInfo.setStages(stages);
+
+            LOGGER.log(Level.INFO, "Retrieved " + stages.size() + " stages for build " +
+                      run.getParent().getFullName() + " #" + run.getNumber());
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error retrieving all stages for build: " + e.getMessage(), e);
+        }
+
+        return stagesInfo;
+    }
+
+    /**
+     * Gets all stages from the workflow graph including their logs
+     * Uses Pipeline REST API plugin's RunExt and StageNodeExt for accurate stage detection
+     *
+     * @param workflowRun WorkflowRun instance
+     * @return List of StageInfo with logs
+     */
+    private List<StageInfo> getAllStagesFromGraph(WorkflowRun workflowRun) {
+        List<StageInfo> stages = new ArrayList<>();
+
+        try {
+            // First, add the special "ALL" stage with complete console log
+            StageInfo allStage = createAllStage(workflowRun);
+            if (allStage != null) {
+                stages.add(allStage);
+            }
+
+            // Use Pipeline REST API plugin to get stages
+            try {
+                RunExt runExt = RunExt.create(workflowRun);
+                List<StageNodeExt> stageNodes = runExt.getStages();
+
+                LOGGER.log(Level.INFO, "Found " + stageNodes.size() + " stages using RunExt");
+
+                // Process each stage
+                for (StageNodeExt stageNode : stageNodes) {
+                    try {
+                        StageInfo stageInfo = extractStageInfoFromStageNodeExt(stageNode, workflowRun);
+                        if (stageInfo != null) {
+                            stages.add(stageInfo);
+                        }
+                    } catch (Exception e) {
+                        LOGGER.log(Level.WARNING, "Error extracting stage info from StageNodeExt: " + e.getMessage(), e);
+                    }
+                }
+
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Error using RunExt, falling back to FlowGraphWalker: " + e.getMessage(), e);
+
+                // Fallback to original method if RunExt fails
+                if (workflowRun.getExecution() == null) {
+                    LOGGER.log(Level.FINE, "No execution found for workflow run");
+                    return stages;
+                }
+
+                // Walk through the flow graph and collect stage nodes
+                FlowGraphWalker walker = new FlowGraphWalker(workflowRun.getExecution());
+                List<FlowNode> stageNodes = new ArrayList<>();
+
+                for (FlowNode node : walker) {
+                    if (node != null && node instanceof StepStartNode) {
+                        LabelAction labelAction = node.getAction(LabelAction.class);
+                        if (labelAction != null && labelAction.getDisplayName() != null) {
+                            String functionName = node.getDisplayFunctionName();
+
+                            // Accept stage nodes only
+                            if ("stage".equals(functionName)) {
+                                stageNodes.add(0, node);
+                            }
+                        }
+                    }
+                }
+
+                LOGGER.log(Level.INFO, "Found " + stageNodes.size() + " stage nodes using FlowGraphWalker");
+
+                // Process each stage node
+                for (FlowNode stageNode : stageNodes) {
+                    try {
+                        StageInfo stageInfo = extractStageInfoFromNode(stageNode, workflowRun);
+                        if (stageInfo != null) {
+                            stages.add(stageInfo);
+                        }
+                    } catch (Exception e2) {
+                        LOGGER.log(Level.WARNING, "Error extracting stage info from node: " + e2.getMessage(), e2);
+                    }
+                }
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error getting stages: " + e.getMessage(), e);
+        }
+
+        return stages;
+    }
+
+    /**
+     * Extracts StageInfo from a StageNodeExt (from Pipeline REST API plugin)
+     *
+     * @param stageNode StageNodeExt from Pipeline REST API
+     * @param run WorkflowRun instance
+     * @return StageInfo with logs
+     */
+    private StageInfo extractStageInfoFromStageNodeExt(StageNodeExt stageNode, WorkflowRun run) {
+        try {
+            String stageId = stageNode.getId();
+            String stageName = stageNode.getName();
+
+            StageInfo stageInfo = new StageInfo();
+            stageInfo.setId(stageId);
+            stageInfo.setName(stageName);
+
+            // Get stage status from StageNodeExt
+            StatusExt statusExt = stageNode.getStatus();
+            String status = convertStatusExtToString(statusExt);
+            stageInfo.setStatus(status);
+            stageInfo.setExecuted(!"not_started".equals(status));
+
+            // Get timing information
+            Long startTimeMillis = stageNode.getStartTimeMillis();
+            Long durationMillis = stageNode.getDurationMillis();
+            stageInfo.setStartTimeMillis(startTimeMillis);
+            stageInfo.setDurationMillis(durationMillis);
+
+            // Get logs for this stage
+            String logs = getStageLogFromStageNodeExt(stageNode, run);
+            stageInfo.setLogs(logs);
+
+            LOGGER.log(Level.FINE, "Extracted stage: " + stageName + " (id: " + stageId + ", status: " + status + ")");
+
+            return stageInfo;
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error extracting stage info from StageNodeExt: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Converts StatusExt to string status
+     *
+     * @param statusExt StatusExt from Pipeline REST API
+     * @return String status
+     */
+    private String convertStatusExtToString(StatusExt statusExt) {
+        if (statusExt == null) {
+            return "unknown";
+        }
+
+        switch (statusExt) {
+            case SUCCESS:
+                return "success";
+            case FAILED:
+                return "failed";
+            case IN_PROGRESS:
+                return "running";
+            case ABORTED:
+                return "aborted";
+            case NOT_EXECUTED:
+                return "not_started";
+            case PAUSED_PENDING_INPUT:
+                return "paused";
+            case UNSTABLE:
+                return "unstable";
+            default:
+                return "unknown";
+        }
+    }
+
+    /**
+     * Gets logs for a stage from StageNodeExt
+     *
+     * @param stageNode StageNodeExt
+     * @param run WorkflowRun instance
+     * @return Stage logs
+     */
+    private String getStageLogFromStageNodeExt(StageNodeExt stageNode, WorkflowRun run) {
+        StringBuilder logBuilder = new StringBuilder();
+
+        try {
+            // Get the FlowNode for this stage
+            FlowNode stageFlowNode = run.getExecution().getNode(stageNode.getId());
+            if (stageFlowNode == null) {
+                LOGGER.log(Level.FINE, "FlowNode not found for stage: " + stageNode.getName());
+                return "";
+            }
+
+            // Collect all nodes that belong to this stage
+            List<FlowNode> stageNodes = new ArrayList<>();
+            stageNodes.add(stageFlowNode);
+
+            // Get all descendant nodes of this stage
+            List<FlowNode> descendants = getDescendantNodes(stageFlowNode, run);
+            stageNodes.addAll(descendants);
+
+            LOGGER.log(Level.FINE, "Stage '" + stageNode.getName() + "' has " + stageNodes.size() + " nodes");
+
+            // Collect logs from all nodes in this stage
+            for (FlowNode node : stageNodes) {
+                try {
+                    LogAction logAction = node.getAction(LogAction.class);
+                    if (logAction != null) {
+                        hudson.console.AnnotatedLargeText<?> logText = logAction.getLogText();
+                        if (logText != null) {
+                            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                            logText.writeLogTo(0, baos);
+                            String log = baos.toString("UTF-8");
+                            if (log != null && !log.trim().isEmpty()) {
+                                logBuilder.append(log);
+                                if (!log.endsWith("\n")) {
+                                    logBuilder.append("\n");
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.FINE, "Error getting log from node " + node.getId() + ": " + e.getMessage());
+                }
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error getting stage log from StageNodeExt: " + e.getMessage(), e);
+        }
+
+        return logBuilder.toString();
+    }
+
+    /**
+     * Creates a special "ALL" stage containing complete console log
+     *
+     * @param workflowRun WorkflowRun instance
+     * @return StageInfo for "ALL" stage
+     */
+    private StageInfo createAllStage(WorkflowRun workflowRun) {
+        try {
+            StageInfo allStage = new StageInfo();
+            allStage.setId("ALL");
+            allStage.setName("ALL");
+
+            // Get build status
+            Result result = workflowRun.getResult();
+            if (result == null) {
+                allStage.setStatus("running");
+            } else if (result == Result.SUCCESS) {
+                allStage.setStatus("success");
+            } else if (result == Result.FAILURE) {
+                allStage.setStatus("failed");
+            } else if (result == Result.ABORTED) {
+                allStage.setStatus("aborted");
+            } else {
+                allStage.setStatus("unknown");
+            }
+
+            allStage.setExecuted(true);
+
+            // Get timing information
+            long startTime = workflowRun.getStartTimeInMillis();
+            long duration = workflowRun.getDuration();
+            allStage.setStartTimeMillis(startTime);
+            allStage.setDurationMillis(duration);
+
+            // Get complete console log
+            String consoleLog = getCompleteConsoleLog(workflowRun);
+            allStage.setLogs(consoleLog);
+
+            LOGGER.log(Level.INFO, "Created ALL stage with " + consoleLog.length() + " characters of logs");
+
+            return allStage;
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error creating ALL stage: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Gets the complete console log for a build
+     *
+     * @param workflowRun WorkflowRun instance
+     * @return Complete console log text
+     */
+    private String getCompleteConsoleLog(WorkflowRun workflowRun) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            workflowRun.getLogText().writeLogTo(0, baos);
+            return baos.toString("UTF-8");
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error getting complete console log: " + e.getMessage(), e);
+            return "";
+        }
+    }
+
+
+
+    /**
+     * Extracts StageInfo from a FlowNode
+     *
+     * @param node FlowNode representing a stage
+     * @param run WorkflowRun instance
+     * @return StageInfo with logs
+     */
+    private StageInfo extractStageInfoFromNode(FlowNode node, WorkflowRun run) {
+        try {
+            // Get stage name
+            String stageName = getStageName(node);
+            String stageId = node.getId();
+
+            StageInfo stageInfo = new StageInfo();
+            stageInfo.setId(stageId);
+            stageInfo.setName(stageName);
+
+            // Get stage status
+            String status = getStageStatus(node);
+            stageInfo.setStatus(status);
+            stageInfo.setExecuted(!"not_started".equals(status));
+
+            // Get timing information
+            TimingAction timingAction = node.getAction(TimingAction.class);
+            if (timingAction != null) {
+                stageInfo.setStartTimeMillis(timingAction.getStartTime());
+
+                // Calculate duration
+                long startTime = timingAction.getStartTime();
+                long currentTime = System.currentTimeMillis();
+
+                // If stage is complete, use the actual end time
+                if (node.isActive()) {
+                    stageInfo.setDurationMillis(currentTime - startTime);
+                } else {
+                    // For completed stages, calculate from start to when it ended
+                    // Use a simple duration calculation
+                    stageInfo.setDurationMillis(currentTime - startTime);
+                }
+            }
+
+            // Get stage logs
+            String logs = getStageLog(node, run);
+            stageInfo.setLogs(logs);
+
+            return stageInfo;
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error extracting stage info from node: " + e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Gets the name of a stage from a FlowNode
+     *
+     * @param node FlowNode
+     * @return Stage name
+     */
+    private String getStageName(FlowNode node) {
+        try {
+            LabelAction labelAction = node.getAction(LabelAction.class);
+            if (labelAction != null && labelAction.getDisplayName() != null) {
+                return labelAction.getDisplayName();
+            }
+            return node.getDisplayName();
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Error getting stage name: " + e.getMessage());
+            return "Unknown Stage";
+        }
+    }
+
+    /**
+     * Gets the status of a stage from a FlowNode
+     *
+     * @param node FlowNode
+     * @return Stage status
+     */
+    private String getStageStatus(FlowNode node) {
+        try {
+            if (node.isActive()) {
+                return "running";
+            }
+
+            // Check error
+            hudson.model.Result result = null;
+            try {
+                // Try to get error action
+                org.jenkinsci.plugins.workflow.actions.ErrorAction errorAction =
+                    node.getAction(org.jenkinsci.plugins.workflow.actions.ErrorAction.class);
+                if (errorAction != null) {
+                    return "failed";
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Error checking error action: " + e.getMessage());
+            }
+
+            return "success";
+
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Error getting stage status: " + e.getMessage());
+            return "unknown";
+        }
+    }
+
+    /**
+     * Gets the log text for a stage
+     *
+     * @param node FlowNode representing the stage
+     * @param run WorkflowRun instance
+     * @return Log text
+     */
+    private String getStageLog(FlowNode node, WorkflowRun run) {
+        StringBuilder logBuilder = new StringBuilder();
+
+        try {
+            // Get log action
+            LogAction logAction = node.getAction(LogAction.class);
+            if (logAction != null) {
+                try {
+                    // LogAction.getLogText() returns AnnotatedLargeText
+                    hudson.console.AnnotatedLargeText<?> logText = logAction.getLogText();
+                    if (logText != null) {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        logText.writeLogTo(0, baos);
+                        logBuilder.append(baos.toString("UTF-8"));
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.FINE, "Error getting log from LogAction: " + e.getMessage());
+                }
+            }
+
+            // Alternative: try to get logs from the node's execution
+            if (logBuilder.length() == 0) {
+                try {
+                    // Get all descendant nodes and collect their logs
+                    List<FlowNode> descendants = getDescendantNodes(node, run);
+                    for (FlowNode descendant : descendants) {
+                        LogAction descLogAction = descendant.getAction(LogAction.class);
+                        if (descLogAction != null) {
+                            try {
+                                hudson.console.AnnotatedLargeText<?> descLogText = descLogAction.getLogText();
+                                if (descLogText != null) {
+                                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                    descLogText.writeLogTo(0, baos);
+                                    String log = baos.toString("UTF-8");
+                                    if (log != null && !log.isEmpty()) {
+                                        logBuilder.append(log);
+                                    }
+                                }
+                            } catch (Exception e) {
+                                LOGGER.log(Level.FINE, "Error getting log from descendant: " + e.getMessage());
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.FINE, "Error getting descendant logs: " + e.getMessage());
+                }
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error getting stage log: " + e.getMessage(), e);
+        }
+
+        return logBuilder.toString();
+    }
+
+    /**
+     * Gets all descendant nodes of a given node (all nodes until the next stage)
+     *
+     * @param node Parent FlowNode (stage node)
+     * @param run WorkflowRun instance
+     * @return List of descendant FlowNodes
+     */
+    private List<FlowNode> getDescendantNodes(FlowNode node, WorkflowRun run) {
+        List<FlowNode> descendants = new ArrayList<>();
+
+        try {
+            if (run.getExecution() == null) {
+                return descendants;
+            }
+
+            FlowGraphWalker walker = new FlowGraphWalker(run.getExecution());
+            boolean foundStart = false;
+            Set<String> collectedIds = new HashSet<>();
+            collectedIds.add(node.getId()); // Don't include the stage node itself
+
+            for (FlowNode n : walker) {
+                // Find the stage node first
+                if (!foundStart) {
+                    if (n.getId().equals(node.getId())) {
+                        foundStart = true;
+                    }
+                    continue;
+                }
+
+                // After finding the stage node, collect all subsequent nodes
+                // until we hit another stage node
+
+                // Check if this is another stage node - if so, stop
+                if (n instanceof StepStartNode) {
+                    LabelAction labelAction = n.getAction(LabelAction.class);
+                    if (labelAction != null) {
+                        String functionName = n.getDisplayFunctionName();
+                        if ("stage".equals(functionName)) {
+                            // Hit another stage, stop collecting
+                            break;
+                        }
+                    }
+                }
+
+                // Add this node if we haven't collected it yet
+                if (!collectedIds.contains(n.getId())) {
+                    descendants.add(n);
+                    collectedIds.add(n.getId());
+                }
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Error getting descendant nodes: " + e.getMessage(), e);
+        }
+
+        return descendants;
     }
 }
 

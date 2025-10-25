@@ -77,12 +77,28 @@ public class StageInfo {
     private List<InputParameterInfo> parameters;
 
     /**
+     * Log text for this stage
+     */
+    private String logs;
+
+    /**
+     * Start time of the stage in milliseconds
+     */
+    private Long startTimeMillis;
+
+    /**
+     * Duration of the stage in milliseconds
+     */
+    private Long durationMillis;
+
+    /**
      * Default constructor
      */
     public StageInfo() {
         this.status = "not_started";
         this.executed = false;
         this.parameters = new ArrayList<>();
+        this.logs = "";
     }
     
     /**
@@ -200,6 +216,30 @@ public class StageInfo {
         }
     }
 
+    public String getLogs() {
+        return logs;
+    }
+
+    public void setLogs(String logs) {
+        this.logs = logs != null ? logs : "";
+    }
+
+    public Long getStartTimeMillis() {
+        return startTimeMillis;
+    }
+
+    public void setStartTimeMillis(Long startTimeMillis) {
+        this.startTimeMillis = startTimeMillis;
+    }
+
+    public Long getDurationMillis() {
+        return durationMillis;
+    }
+
+    public void setDurationMillis(Long durationMillis) {
+        this.durationMillis = durationMillis;
+    }
+
     /**
      * Checks whether the stage is pending input
      *
@@ -257,7 +297,12 @@ public class StageInfo {
                 }
             }
         }
-        sb.append("]");
+        sb.append("],");
+
+        // Logs and timing information
+        sb.append("\"logs\":").append(JsonUtils.toJsonString(logs)).append(",");
+        sb.append("\"startTimeMillis\":").append(startTimeMillis != null ? startTimeMillis : "null").append(",");
+        sb.append("\"durationMillis\":").append(durationMillis != null ? durationMillis : "null");
 
         sb.append("}");
         return sb.toString();
@@ -339,6 +384,21 @@ public class StageInfo {
 
         public Builder addParameter(InputParameterInfo parameter) {
             this.stageInfo.addParameter(parameter);
+            return this;
+        }
+
+        public Builder logs(String logs) {
+            this.stageInfo.setLogs(logs);
+            return this;
+        }
+
+        public Builder startTimeMillis(Long startTimeMillis) {
+            this.stageInfo.setStartTimeMillis(startTimeMillis);
+            return this;
+        }
+
+        public Builder durationMillis(Long durationMillis) {
+            this.stageInfo.setDurationMillis(durationMillis);
             return this;
         }
 

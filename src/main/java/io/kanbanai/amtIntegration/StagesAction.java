@@ -3,9 +3,11 @@ package io.kanbanai.amtIntegration;
 import hudson.Extension;
 import hudson.model.Action;
 import hudson.model.Run;
+import io.kanbanai.amtIntegration.model.StageInfo;
 import jenkins.model.TransientActionFactory;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.verb.GET;
 import org.kohsuke.stapler.verb.POST;
 
 import javax.annotation.Nonnull;
@@ -104,6 +106,7 @@ public class StagesAction implements Action {
      * @param rsp StaplerResponse
      * @throws IOException if I/O error occurs
      */
+    @GET
     public void doStages(StaplerRequest req, StaplerResponse rsp) throws IOException {
         LOGGER.log(Level.INFO, "Processing stages request for build " +
                   run.getParent().getFullName() + " #" + run.getNumber());
@@ -260,6 +263,103 @@ public class StagesAction implements Action {
                 "An unexpected error occurred while processing the request: " + e.getMessage());
         }
     }
+
+    /**
+     * Handles GET request at /job/{JOB_NAME}/{BUILD_NUMBER}/amt-integration/allstages
+     *
+     * Returns all stages including those not yet executed, with their logs
+     *
+     * URL pattern: /job/{JOB_NAME}/{BUILD_NUMBER}/amt-integration/allstages
+     *
+     * @param req StaplerRequest
+     * @param rsp StaplerResponse
+     * @throws IOException if I/O error occurs
+     */
+    @GET
+    public void doAllstages(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        LOGGER.log(Level.INFO, "Processing allstages request for build " +
+                  run.getParent().getFullName() + " #" + run.getNumber());
+
+        try {
+            // Check permissions
+            if (!checkBuildReadPermission()) {
+                sendErrorResponse(rsp, 403, "Access denied to build",
+                    "You don't have READ permission for this build");
+                return;
+            }
+
+            // Get all stages information with logs from service
+            StagesInfo stagesInfo = stageService.getAllStagesWithLogs(run);
+
+            // Return JSON response
+            sendSuccessResponse(rsp, stagesInfo);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Unexpected error in doAllstages: " + e.getMessage(), e);
+            sendErrorResponse(rsp, 500, "Internal server error",
+                "An unexpected error occurred while processing the request: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Handles GET request at /job/{JOB_NAME}/{BUILD_NUMBER}/amt-integration/stagelog
+     *
+     * Returns log for a specific stage
+     *
+     * URL pattern: /job/{JOB_NAME}/{BUILD_NUMBER}/amt-integration/stagelog?stageId={stageId}
+     *
+     * @param req StaplerRequest
+     * @param rsp StaplerResponse
+     * @throws IOException if I/O error occurs
+     */
+    @GET
+    public void doStagelog(StaplerRequest req, StaplerResponse rsp) throws IOException {
+        LOGGER.log(Level.INFO, "Processing stagelog request for build " +
+                  run.getParent().getFullName() + " #" + run.getNumber());
+
+        try {
+            // Check permissions
+            if (!checkBuildReadPermission()) {
+                sendErrorResponse(rsp, 403, "Access denied to build",
+                    "You don't have READ permission for this build");
+                return;
+            }
+
+            // Get stageId parameter
+            String stageId = req.getParameter("stageId");
+            if (stageId == null || stageId.trim().isEmpty()) {
+                sendErrorResponse(rsp, 400, "Missing required parameter: stageId",
+                    "Please provide the stageId query parameter");
+                return;
+            }
+
+            // Get all stages to find the requested one
+            StagesInfo stagesInfo = stageService.getAllStagesWithLogs(run);
+
+            // Find the stage with matching ID
+            StageInfo targetStage = null;
+            for (StageInfo stage : stagesInfo.getStages()) {
+                if (stageId.equals(stage.getId())) {
+                    targetStage = stage;
+                    break;
+                }
+            }
+
+            if (targetStage == null) {
+                sendErrorResponse(rsp, 404, "Stage not found",
+                    "Stage with ID " + stageId + " not found");
+                return;
+            }
+
+            // Return JSON response with stage log
+            sendStageLogResponse(rsp, targetStage);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Unexpected error in doStagelog: " + e.getMessage(), e);
+            sendErrorResponse(rsp, 500, "Internal server error",
+                "An unexpected error occurred while processing the request: " + e.getMessage());
+        }
+    }
     
     /**
      * Checks if current user has READ permission for the build
@@ -412,6 +512,26 @@ public class StagesAction implements Action {
         json.append("\"success\":true,");
         json.append("\"message\":\"Input aborted successfully\",");
         json.append("\"inputId\":").append(jsonString(inputId));
+        json.append("}");
+
+        rsp.getWriter().write(json.toString());
+    }
+
+    /**
+     * Sends success response with stage log information
+     *
+     * @param rsp StaplerResponse
+     * @param stageInfo Stage information with logs
+     * @throws IOException if I/O error occurs
+     */
+    private void sendStageLogResponse(StaplerResponse rsp, StageInfo stageInfo) throws IOException {
+        rsp.setStatus(200);
+        rsp.setContentType("application/json;charset=UTF-8");
+
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"success\":true,");
+        json.append("\"data\":").append(stageInfo.toJson());
         json.append("}");
 
         rsp.getWriter().write(json.toString());
