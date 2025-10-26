@@ -370,45 +370,67 @@ public class ActiveChoicesService {
      */
     private Map<String, Object> getRawScriptFromActiveChoicesParameter(ParameterDefinition paramDef) {
         try {
-            // Lấy Script object từ parameter
-            Object script = invokeMethod(paramDef, "getScript");
-            if (script == null) {
+            LOGGER.log(Level.INFO, "Attempting to get raw script from parameter: " + paramDef.getName());
+
+            // Lấy Script object từ parameter (GroovyScript)
+            // GroovyScript.getScript() returns SecureGroovyScript object
+            Object groovyScript = invokeMethod(paramDef, "getScript");
+            if (groovyScript == null) {
+                LOGGER.log(Level.WARNING, "getScript() returned null for parameter: " + paramDef.getName());
                 return null;
             }
 
+            LOGGER.log(Level.INFO, "GroovyScript object class: " + groovyScript.getClass().getName());
+
+            // groovyScript is actually a GroovyScript object
+            // We need to call getScript() on it to get SecureGroovyScript
+            Object secureScript = invokeMethod(groovyScript, "getScript");
+            if (secureScript == null) {
+                LOGGER.log(Level.WARNING, "groovyScript.getScript() returned null for parameter: " + paramDef.getName());
+                return null;
+            }
+
+            LOGGER.log(Level.INFO, "SecureScript object class: " + secureScript.getClass().getName());
             Map<String, Object> result = new HashMap<>();
 
-            // Lấy SecureScript object từ Script
+            // Lấy script content từ SecureGroovyScript
             try {
-                Object secureScript = invokeMethod(script, "getSecureScript");
-                if (secureScript != null) {
-                    // Lấy script content
-                    Object scriptContent = invokeMethod(secureScript, "getScript");
-                    if (scriptContent != null) {
-                        result.put("script", scriptContent.toString());
-                    }
-
-                    // Lấy sandbox flag
-                    try {
-                        Object sandbox = invokeMethod(secureScript, "isSandbox");
-                        if (sandbox instanceof Boolean) {
-                            result.put("sandbox", (Boolean) sandbox);
-                        }
-                    } catch (Exception e) {
-                        // Không có sandbox method hoặc lỗi
-                        result.put("sandbox", null);
-                    }
-
-                    return result;
+                Object scriptContent = invokeMethod(secureScript, "getScript");
+                if (scriptContent != null) {
+                    result.put("script", scriptContent.toString());
+                    LOGGER.log(Level.INFO, "Successfully extracted script content, length: " + scriptContent.toString().length());
+                } else {
+                    LOGGER.log(Level.WARNING, "getScript() on SecureScript returned null");
                 }
             } catch (Exception e) {
-                LOGGER.log(Level.FINE, "Không thể lấy SecureScript: " + e.getMessage());
+                LOGGER.log(Level.WARNING, "Error getting script content: " + e.getMessage(), e);
+            }
+
+            // Lấy sandbox flag từ SecureGroovyScript
+            try {
+                Object sandbox = invokeMethod(secureScript, "isSandbox");
+                if (sandbox instanceof Boolean) {
+                    result.put("sandbox", (Boolean) sandbox);
+                    LOGGER.log(Level.INFO, "Successfully extracted sandbox flag: " + sandbox);
+                } else {
+                    LOGGER.log(Level.WARNING, "isSandbox() returned non-Boolean: " + (sandbox != null ? sandbox.getClass().getName() : "null"));
+                }
+            } catch (Exception e) {
+                // Không có sandbox method hoặc lỗi
+                LOGGER.log(Level.WARNING, "Error getting sandbox flag: " + e.getMessage(), e);
+                result.put("sandbox", null);
+            }
+
+            if (!result.isEmpty()) {
+                LOGGER.log(Level.INFO, "Successfully extracted raw script info for parameter: " + paramDef.getName());
+                return result;
             }
 
         } catch (Exception e) {
-            LOGGER.log(Level.FINE, "Không thể lấy raw script từ Active Choices parameter: " + e.getMessage());
+            LOGGER.log(Level.WARNING, "Không thể lấy raw script từ Active Choices parameter: " + e.getMessage(), e);
         }
 
+        LOGGER.log(Level.WARNING, "Failed to extract raw script for parameter: " + paramDef.getName());
         return null;
     }
 
