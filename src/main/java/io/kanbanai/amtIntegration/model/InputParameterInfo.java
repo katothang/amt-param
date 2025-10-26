@@ -2,7 +2,9 @@ package io.kanbanai.amtIntegration.model;
 
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Model class containing information about an input parameter in a pipeline stage.
@@ -20,37 +22,43 @@ import java.util.List;
  * @since 1.0.4
  */
 public class InputParameterInfo {
-    
+
     /**
      * Parameter name
      */
     private String name;
-    
+
     /**
      * Parameter type (e.g., "StringParameterDefinition", "BooleanParameterDefinition", "ChoiceParameterDefinition")
      */
     private String type;
-    
+
     /**
      * Parameter description
      */
     private String description;
-    
+
     /**
      * Default value for the parameter
      */
     private String defaultValue;
-    
+
     /**
      * Input type for UI rendering (text, password, checkbox, select, etc.)
      */
     private String inputType;
-    
+
     /**
-     * List of choices (for choice/select parameters)
+     * List of choices (for choice/select parameters) - kept for backward compatibility
      */
     private List<String> choices;
-    
+
+    /**
+     * Map of choices with key-value pairs (for choice/select parameters)
+     * Key = value to submit, Value = display text
+     */
+    private Map<String, String> choicesMap;
+
     /**
      * Whether this parameter is required
      */
@@ -61,6 +69,7 @@ public class InputParameterInfo {
      */
     public InputParameterInfo() {
         this.choices = new ArrayList<>();
+        this.choicesMap = new LinkedHashMap<>();
         this.required = false;
         this.inputType = "text";
     }
@@ -122,15 +131,30 @@ public class InputParameterInfo {
     public List<String> getChoices() {
         return choices;
     }
-    
+
     public void setChoices(List<String> choices) {
         this.choices = choices != null ? choices : new ArrayList<>();
+        // Also populate choicesMap with key=value for backward compatibility
+        if (this.choices != null && !this.choices.isEmpty()) {
+            this.choicesMap = new LinkedHashMap<>();
+            for (String choice : this.choices) {
+                this.choicesMap.put(choice, choice);
+            }
+        }
     }
-    
+
+    public Map<String, String> getChoicesMap() {
+        return choicesMap;
+    }
+
+    public void setChoicesMap(Map<String, String> choicesMap) {
+        this.choicesMap = choicesMap != null ? choicesMap : new LinkedHashMap<>();
+    }
+
     public boolean isRequired() {
         return required;
     }
-    
+
     public void setRequired(boolean required) {
         this.required = required;
     }
@@ -143,26 +167,43 @@ public class InputParameterInfo {
     public String toJson() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
-        
+
         sb.append("\"name\":").append(JsonUtils.toJsonString(name)).append(",");
         sb.append("\"type\":").append(JsonUtils.toJsonString(type)).append(",");
         sb.append("\"description\":").append(JsonUtils.toJsonString(description)).append(",");
         sb.append("\"defaultValue\":").append(JsonUtils.toJsonString(defaultValue)).append(",");
         sb.append("\"inputType\":").append(JsonUtils.toJsonString(inputType)).append(",");
         sb.append("\"required\":").append(JsonUtils.toJsonBoolean(required)).append(",");
-        
-        // Choices array
+
+        // Choices array - format as array of objects with key and value
         sb.append("\"choices\":[");
-        if (choices != null && !choices.isEmpty()) {
+        if (choicesMap != null && !choicesMap.isEmpty()) {
+            // Use choicesMap for key-value format
+            int i = 0;
+            for (Map.Entry<String, String> entry : choicesMap.entrySet()) {
+                sb.append("{");
+                sb.append("\"key\":").append(JsonUtils.toJsonString(entry.getKey())).append(",");
+                sb.append("\"value\":").append(JsonUtils.toJsonString(entry.getValue()));
+                sb.append("}");
+                if (i < choicesMap.size() - 1) {
+                    sb.append(",");
+                }
+                i++;
+            }
+        } else if (choices != null && !choices.isEmpty()) {
+            // Fallback to simple string array if choicesMap is empty
             for (int i = 0; i < choices.size(); i++) {
-                sb.append(JsonUtils.toJsonString(choices.get(i)));
+                sb.append("{");
+                sb.append("\"key\":").append(JsonUtils.toJsonString(choices.get(i))).append(",");
+                sb.append("\"value\":").append(JsonUtils.toJsonString(choices.get(i)));
+                sb.append("}");
                 if (i < choices.size() - 1) {
                     sb.append(",");
                 }
             }
         }
         sb.append("]");
-        
+
         sb.append("}");
         return sb.toString();
     }
