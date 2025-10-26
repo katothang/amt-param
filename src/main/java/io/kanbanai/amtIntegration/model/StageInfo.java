@@ -25,12 +25,17 @@ public class StageInfo {
      * Unique identifier for the stage/input
      */
     private String id;
-    
+
+    /**
+     * Input ID (if this stage has an input step)
+     */
+    private String inputId;
+
     /**
      * Name of the stage
      */
     private String name;
-    
+
     /**
      * Status of the input: "pending", "approved", "aborted", "not_started"
      */
@@ -120,11 +125,19 @@ public class StageInfo {
     public String getId() {
         return id;
     }
-    
+
     public void setId(String id) {
         this.id = id;
     }
-    
+
+    public String getInputId() {
+        return inputId;
+    }
+
+    public void setInputId(String inputId) {
+        this.inputId = inputId;
+    }
+
     public String getName() {
         return name;
     }
@@ -277,6 +290,7 @@ public class StageInfo {
         sb.append("{");
 
         sb.append("\"id\":").append(JsonUtils.toJsonString(id)).append(",");
+        sb.append("\"inputId\":").append(JsonUtils.toJsonString(inputId)).append(",");
         sb.append("\"name\":").append(JsonUtils.toJsonString(name)).append(",");
         sb.append("\"status\":").append(JsonUtils.toJsonString(status)).append(",");
         sb.append("\"message\":").append(JsonUtils.toJsonString(message)).append(",");

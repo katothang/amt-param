@@ -1142,6 +1142,12 @@ public class WorkflowStageService {
             String logs = getStageLogFromStageNodeExt(stageNode, run);
             stageInfo.setLogs(logs);
 
+            // If stage is paused (waiting for input), populate input information
+            if ("paused".equals(status)) {
+                LOGGER.log(Level.WARNING, "Stage is paused, looking for input: " + stageName);
+                populateInputInfoForPausedStage(stageInfo, stageId, run);
+            }
+
             LOGGER.log(Level.FINE, "Extracted stage: " + stageName + " (id: " + stageId + ", status: " + status + ")");
 
             return stageInfo;
@@ -1180,6 +1186,272 @@ public class WorkflowStageService {
                 return "unstable";
             default:
                 return "unknown";
+        }
+    }
+
+    /**
+     * Populates input information for a paused stage
+     * For paused stages, we simply take the first pending input execution
+     *
+     * @param stageInfo StageInfo object to populate
+     * @param stageId Stage ID
+     * @param run WorkflowRun instance
+     */
+    private void populateInputInfoForPausedStage(StageInfo stageInfo, String stageId, WorkflowRun run) {
+        try {
+            // Get InputAction from the run
+            InputAction inputAction = run.getAction(InputAction.class);
+            if (inputAction == null) {
+                LOGGER.log(Level.WARNING, "No InputAction found for paused stage: " + stageInfo.getName());
+                return;
+            }
+
+            // Get all input executions
+            List<InputStepExecution> executions = inputAction.getExecutions();
+            if (executions == null || executions.isEmpty()) {
+                LOGGER.log(Level.WARNING, "No input executions found for paused stage: " + stageInfo.getName());
+                return;
+            }
+
+            LOGGER.log(Level.WARNING, "Found " + executions.size() + " input executions, using first one for paused stage: " + stageInfo.getName());
+
+            // For a paused stage, use the first input execution
+            // (typically there's only one pending input per paused stage)
+            InputStepExecution execution = executions.get(0);
+
+            // Get input ID
+            String inputId = execution.getId();
+            if (inputId == null) {
+                LOGGER.log(Level.WARNING, "Input ID is null for paused stage: " + stageInfo.getName());
+                return;
+            }
+
+            // Get InputStep
+            InputStep inputStep = execution.getInput();
+            if (inputStep == null) {
+                LOGGER.log(Level.WARNING, "InputStep is null for paused stage: " + stageInfo.getName());
+                return;
+            }
+
+            // Get input message
+            String message = inputStep.getMessage();
+
+            // Get submitter
+            String submitter = inputStep.getSubmitter();
+
+            // Get proceed text (default to "Proceed" if not available)
+            String proceedText = inputStep.getOk();
+            if (proceedText == null || proceedText.trim().isEmpty()) {
+                proceedText = "Proceed";
+            }
+
+            // Build URLs
+            String baseUrl = getBuildUrl(run);
+            String jobUrl = run.getParent().getUrl();
+            String buildNumber = String.valueOf(run.getNumber());
+
+            // Populate input information
+            stageInfo.setInputId(inputId);
+            stageInfo.setMessage(message);
+            stageInfo.setSubmitter(submitter);
+            stageInfo.setProceedText(proceedText);
+
+            // Set URLs in both formats for compatibility
+            stageInfo.setSubmitUrl(baseUrl + "input/" + inputId + "/submit");
+            stageInfo.setAbortUrl(baseUrl + "input/" + inputId + "/abort");
+            stageInfo.setProceedUrl("/" + jobUrl + buildNumber + "/wfapi/inputSubmit?inputId=" + inputId);
+
+            // Extract input parameters
+            List<InputParameterInfo> parameters = extractInputParametersDirect(inputStep);
+            stageInfo.setParameters(parameters);
+
+            LOGGER.log(Level.WARNING, "Successfully populated input info for paused stage: " + stageInfo.getName() + " with input ID: " + inputId);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error populating input info for paused stage: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Populates input information for a stage using InputStepExecution
+     *
+     * @param stageInfo StageInfo object to populate
+     * @param execution InputStepExecution for this stage
+     * @param run WorkflowRun instance
+     */
+    private void populateInputInfoFromExecution(StageInfo stageInfo, InputStepExecution execution, Run<?, ?> run) {
+        try {
+            // Get input ID
+            String inputId = execution.getId();
+            if (inputId == null) {
+                return;
+            }
+
+            // Get InputStep
+            InputStep inputStep = execution.getInput();
+            if (inputStep == null) {
+                return;
+            }
+
+            // Get input message
+            String message = inputStep.getMessage();
+
+            // Get submitter
+            String submitter = inputStep.getSubmitter();
+
+            // Get proceed text (default to "Proceed" if not available)
+            String proceedText = inputStep.getOk();
+            if (proceedText == null || proceedText.trim().isEmpty()) {
+                proceedText = "Proceed";
+            }
+
+            // Build URLs
+            String baseUrl = getBuildUrl(run);
+            String jobUrl = run.getParent().getUrl();
+            String buildNumber = String.valueOf(run.getNumber());
+
+            // Populate input information
+            stageInfo.setInputId(inputId);
+            stageInfo.setMessage(message);
+            stageInfo.setSubmitter(submitter);
+            stageInfo.setProceedText(proceedText);
+
+            // Set URLs in both formats for compatibility
+            stageInfo.setSubmitUrl(baseUrl + "input/" + inputId + "/submit");
+            stageInfo.setAbortUrl(baseUrl + "input/" + inputId + "/abort");
+            stageInfo.setProceedUrl("/" + jobUrl + buildNumber + "/wfapi/inputSubmit?inputId=" + inputId);
+
+            // Extract input parameters
+            List<InputParameterInfo> parameters = extractInputParametersDirect(inputStep);
+            stageInfo.setParameters(parameters);
+
+            LOGGER.log(Level.WARNING, "Successfully populated input info for stage: " + stageInfo.getName() + " with input ID: " + inputId);
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error populating input info from execution: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Populates input information for a stage by finding input steps within the stage
+     *
+     * @param stageInfo StageInfo to populate
+     * @param stageId Stage ID
+     * @param run WorkflowRun instance
+     */
+    private void populateInputInfoForStage(StageInfo stageInfo, String stageId, WorkflowRun run) {
+        try {
+            // Get InputAction from the run
+            InputAction inputAction = run.getAction(InputAction.class);
+            if (inputAction == null) {
+                LOGGER.log(Level.WARNING, "No InputAction found for build, stage: " + stageInfo.getName());
+                return;
+            }
+
+            // Get all input executions
+            List<InputStepExecution> executions = inputAction.getExecutions();
+            if (executions == null || executions.isEmpty()) {
+                LOGGER.log(Level.WARNING, "No input executions found, stage: " + stageInfo.getName());
+                return;
+            }
+
+            LOGGER.log(Level.WARNING, "Found " + executions.size() + " input executions for stage: " + stageInfo.getName() + " (ID: " + stageId + ")");
+
+            // Check each input execution to see if it belongs to this stage
+            for (InputStepExecution execution : executions) {
+                try {
+                    String execId = execution.getId();
+                    LOGGER.log(Level.WARNING, "Checking input execution: " + execId);
+
+                    // Get the flow node for this input execution
+                    FlowNode inputNode = execution.getContext().get(FlowNode.class);
+                    if (inputNode == null) {
+                        LOGGER.log(Level.WARNING, "Input node is null for execution: " + execId);
+                        continue;
+                    }
+
+                    LOGGER.log(Level.WARNING, "Input node ID: " + inputNode.getId() + ", Stage ID: " + stageId);
+
+                    // Try to find the enclosing stage for this input node
+                    String inputStageName = findEnclosingStage(inputNode, run);
+                    LOGGER.log(Level.WARNING, "Input enclosing stage: " + inputStageName + ", Current stage: " + stageInfo.getName());
+
+                    // Check if this input belongs to this stage by comparing stage names
+                    if (inputStageName != null && inputStageName.equals(stageInfo.getName())) {
+                        // Found matching input, use the helper method to populate
+                        populateInputInfoFromExecution(stageInfo, execution, run);
+                        // Only populate the first input found in this stage
+                        break;
+                    } else {
+                        LOGGER.log(Level.WARNING, "Input node does not match stage. Input stage: " + inputStageName + ", Current stage: " + stageInfo.getName());
+                    }
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Error checking input execution: " + e.getMessage(), e);
+                }
+            }
+
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error populating input info for stage: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Checks if a node is in a list of nodes
+     *
+     * @param node FlowNode to check
+     * @param nodeList List of FlowNodes
+     * @return true if node is in list, false otherwise
+     */
+    private boolean isNodeInList(FlowNode node, List<FlowNode> nodeList) {
+        if (node == null || nodeList == null) {
+            return false;
+        }
+
+        String nodeId = node.getId();
+        for (FlowNode n : nodeList) {
+            if (n.getId().equals(nodeId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Finds the enclosing stage name for a given flow node
+     *
+     * @param node FlowNode to find enclosing stage for
+     * @param run WorkflowRun instance
+     * @return Stage name or null if not found
+     */
+    private String findEnclosingStage(FlowNode node, WorkflowRun run) {
+        try {
+            // Walk up the parent chain to find a stage node
+            FlowNode current = node;
+
+            while (current != null) {
+                // Check if this node is a stage node
+                if (current instanceof StepStartNode) {
+                    String functionName = current.getDisplayFunctionName();
+                    if ("stage".equals(functionName)) {
+                        // Found a stage node, return its name
+                        return getStageName(current);
+                    }
+                }
+
+                // Move to parent nodes
+                List<FlowNode> parents = current.getParents();
+                if (parents == null || parents.isEmpty()) {
+                    break;
+                }
+
+                // Take the first parent
+                current = parents.get(0);
+            }
+
+            return null;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error finding enclosing stage: " + e.getMessage(), e);
+            return null;
         }
     }
 
@@ -1326,7 +1598,7 @@ public class WorkflowStageService {
             stageInfo.setName(stageName);
 
             // Get stage status
-            String status = getStageStatus(node);
+            String status = getStageStatus(node, run);
             stageInfo.setStatus(status);
             stageInfo.setExecuted(!"not_started".equals(status));
 
@@ -1352,6 +1624,12 @@ public class WorkflowStageService {
             // Get stage logs
             String logs = getStageLog(node, run);
             stageInfo.setLogs(logs);
+
+            // If stage is paused (waiting for input), populate input information
+            if ("paused".equals(status)) {
+                LOGGER.log(Level.WARNING, "Stage is paused (fallback), looking for input: " + stageName);
+                populateInputInfoForPausedStage(stageInfo, stageId, run);
+            }
 
             return stageInfo;
 
@@ -1384,11 +1662,16 @@ public class WorkflowStageService {
      * Gets the status of a stage from a FlowNode
      *
      * @param node FlowNode
+     * @param run WorkflowRun instance (optional, for checking paused status)
      * @return Stage status
      */
-    private String getStageStatus(FlowNode node) {
+    private String getStageStatus(FlowNode node, WorkflowRun run) {
         try {
             if (node.isActive()) {
+                // Check if it's paused waiting for input
+                if (run != null && isPausedForInput(node, run)) {
+                    return "paused";
+                }
                 return "running";
             }
 
@@ -1410,6 +1693,44 @@ public class WorkflowStageService {
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Error getting stage status: " + e.getMessage());
             return "unknown";
+        }
+    }
+
+    /**
+     * Checks if a node is paused waiting for input
+     *
+     * @param node FlowNode
+     * @param run WorkflowRun instance
+     * @return true if paused for input, false otherwise
+     */
+    private boolean isPausedForInput(FlowNode node, WorkflowRun run) {
+        try {
+            InputAction inputAction = run.getAction(InputAction.class);
+            if (inputAction == null) {
+                return false;
+            }
+
+            List<InputStepExecution> executions = inputAction.getExecutions();
+            if (executions == null || executions.isEmpty()) {
+                return false;
+            }
+
+            // Check if any input execution is associated with this node or its descendants
+            for (InputStepExecution execution : executions) {
+                try {
+                    FlowNode inputNode = execution.getContext().get(FlowNode.class);
+                    if (inputNode != null && inputNode.getId().equals(node.getId())) {
+                        return true;
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                }
+            }
+
+            return false;
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Error checking paused for input: " + e.getMessage());
+            return false;
         }
     }
 
