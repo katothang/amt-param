@@ -38,9 +38,9 @@ public class StageInfo {
     private String name;
 
     /**
-     * Status of the input: "pending", "approved", "aborted", "not_started"
+     * Status of the stage
      */
-    private String status;
+    private StageStatus status;
     
     /**
      * Message displayed for the input prompt
@@ -101,12 +101,12 @@ public class StageInfo {
      * Default constructor
      */
     public StageInfo() {
-        this.status = "not_started";
+        this.status = StageStatus.NOT_STARTED;
         this.executed = false;
         this.parameters = new ArrayList<>();
         this.logs = "";
     }
-    
+
     /**
      * Constructor with basic information
      *
@@ -114,11 +114,24 @@ public class StageInfo {
      * @param name Stage name
      * @param status Stage status
      */
-    public StageInfo(String id, String name, String status) {
+    public StageInfo(String id, String name, StageStatus status) {
         this();
         this.id = id;
         this.name = name;
         this.status = status;
+    }
+
+    /**
+     * Constructor with basic information (backward compatibility)
+     *
+     * @param id Stage/input ID
+     * @param name Stage name
+     * @param status Stage status as string
+     * @deprecated Use constructor with StageStatus enum instead
+     */
+    @Deprecated
+    public StageInfo(String id, String name, String status) {
+        this(id, name, StageStatus.fromValue(status));
     }
     
     // Getters and Setters
@@ -147,12 +160,32 @@ public class StageInfo {
         this.name = name;
     }
     
-    public String getStatus() {
+    public StageStatus getStatus() {
         return status;
     }
-    
-    public void setStatus(String status) {
+
+    /**
+     * Gets the status as string value (for backward compatibility)
+     *
+     * @return Status string value
+     */
+    public String getStatusValue() {
+        return status != null ? status.getValue() : null;
+    }
+
+    public void setStatus(StageStatus status) {
         this.status = status;
+    }
+
+    /**
+     * Sets the status from string value (for backward compatibility)
+     *
+     * @param status Status string value
+     * @deprecated Use setStatus(StageStatus) instead
+     */
+    @Deprecated
+    public void setStatus(String status) {
+        this.status = StageStatus.fromValue(status);
     }
     
     public String getMessage() {
@@ -257,28 +290,55 @@ public class StageInfo {
     /**
      * Checks whether the stage is pending input
      *
-     * @return true if status is "pending", false otherwise
+     * @return true if status is PENDING, false otherwise
      */
     public boolean isPending() {
-        return "pending".equals(status);
+        return status == StageStatus.PENDING;
     }
-    
+
     /**
      * Checks whether the stage has been approved
      *
-     * @return true if status is "approved", false otherwise
+     * @return true if status is APPROVED, false otherwise
      */
     public boolean isApproved() {
-        return "approved".equals(status);
+        return status == StageStatus.APPROVED;
     }
-    
+
     /**
      * Checks whether the stage has been aborted
      *
-     * @return true if status is "aborted", false otherwise
+     * @return true if status is ABORTED, false otherwise
      */
     public boolean isAborted() {
-        return "aborted".equals(status);
+        return status == StageStatus.ABORTED;
+    }
+
+    /**
+     * Checks whether the stage is running
+     *
+     * @return true if status is RUNNING, false otherwise
+     */
+    public boolean isRunning() {
+        return status == StageStatus.RUNNING;
+    }
+
+    /**
+     * Checks whether the stage completed successfully
+     *
+     * @return true if status is SUCCESS or APPROVED, false otherwise
+     */
+    public boolean isSuccessful() {
+        return status != null && status.isSuccessful();
+    }
+
+    /**
+     * Checks whether the stage failed
+     *
+     * @return true if status is FAILED or ABORTED, false otherwise
+     */
+    public boolean isFailed() {
+        return status != null && status.isFailed();
     }
     
     /**
@@ -321,8 +381,21 @@ public class StageInfo {
             this.stageInfo.setName(name);
         }
         
-        public Builder status(String status) {
+        public Builder status(StageStatus status) {
             this.stageInfo.setStatus(status);
+            return this;
+        }
+
+        /**
+         * Sets status from string value (backward compatibility)
+         *
+         * @param status Status string value
+         * @return Builder instance
+         * @deprecated Use status(StageStatus) instead
+         */
+        @Deprecated
+        public Builder status(String status) {
+            this.stageInfo.setStatus(StageStatus.fromValue(status));
             return this;
         }
         

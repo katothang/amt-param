@@ -1,6 +1,7 @@
 package io.kanbanai.amtIntegration.util;
 
 import io.kanbanai.amtIntegration.config.ValidationConstants;
+import io.kanbanai.amtIntegration.model.ChoiceItem;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -219,29 +220,41 @@ public final class JsonUtils {
      *
      * @param choices the list of choice maps to convert, can be null
      * @return JSON array string representation
+     * @deprecated Use toJsonChoicesArrayFromItems instead for better type safety
      */
+    @Deprecated
     public static String toJsonChoicesArray(List<Map<String, String>> choices) {
         if (choices == null || choices.isEmpty()) {
             return "[]";
         }
 
-        StringBuilder sb = new StringBuilder("[");
-
-        for (int i = 0; i < choices.size(); i++) {
-            Map<String, String> choice = choices.get(i);
+        // Convert Map list to ChoiceItem list
+        List<ChoiceItem> choiceItems = new ArrayList<>();
+        for (Map<String, String> choice : choices) {
             if (choice != null) {
-                sb.append("{");
-                sb.append("\"key\":").append(toJsonString(choice.get("key"))).append(",");
-                sb.append("\"value\":").append(toJsonString(choice.get("value")));
-                sb.append("}");
-
-                if (i < choices.size() - 1) {
-                    sb.append(",");
-                }
+                String key = choice.get("key");
+                String value = choice.get("value");
+                choiceItems.add(new ChoiceItem(key, value));
             }
         }
 
-        sb.append("]");
-        return sb.toString();
+        return toJsonChoicesArrayFromItems(choiceItems);
+    }
+
+    /**
+     * Converts a list of ChoiceItem objects to JSON array format using ObjectMapper.
+     * This method uses Jackson ObjectMapper for proper JSON serialization.
+     *
+     * @param choices the list of ChoiceItem objects to convert, can be null
+     * @return JSON array string representation
+     */
+    public static String toJsonChoicesArrayFromItems(List<ChoiceItem> choices) {
+        if (choices == null || choices.isEmpty()) {
+            return "[]";
+        }
+
+        // Use JsonMapper for proper serialization
+        String json = JsonMapper.toJson(choices);
+        return json != null ? json : "[]";
     }
 }

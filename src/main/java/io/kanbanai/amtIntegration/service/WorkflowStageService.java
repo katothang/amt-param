@@ -5,6 +5,7 @@ import hudson.model.Result;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterValue;
 import io.kanbanai.amtIntegration.model.StageInfo;
+import io.kanbanai.amtIntegration.model.StageStatus;
 import io.kanbanai.amtIntegration.model.StagesInfo;
 import io.kanbanai.amtIntegration.model.InputParameterInfo;
 import jenkins.model.Jenkins;
@@ -110,11 +111,11 @@ public class WorkflowStageService {
         
         // Set build status
         if (run.isBuilding()) {
-            stagesInfo.setBuildStatus("RUNNING");
+            stagesInfo.setBuildStatus(StageStatus.RUNNING.getValue());
         } else if (run.getResult() != null) {
             stagesInfo.setBuildStatus(run.getResult().toString());
         } else {
-            stagesInfo.setBuildStatus("UNKNOWN");
+            stagesInfo.setBuildStatus(StageStatus.UNKNOWN.getValue());
         }
         
         // Check if this is a WorkflowRun (Pipeline job)
@@ -563,7 +564,7 @@ public class WorkflowStageService {
 
             // Determine status
             // If execution exists in the list, it's pending
-            stageInfo.setStatus("pending");
+            stageInfo.setStatus(StageStatus.PENDING);
             stageInfo.setExecuted(false);
 
             // Build URLs
@@ -632,7 +633,7 @@ public class WorkflowStageService {
             stageInfo.setSubmitter(submitter);
 
             // Determine status - pending input
-            stageInfo.setStatus("pending");
+            stageInfo.setStatus(StageStatus.PENDING);
             stageInfo.setExecuted(false);
 
             // Build URLs
@@ -997,11 +998,11 @@ public class WorkflowStageService {
 
         // Set build status
         if (run.isBuilding()) {
-            stagesInfo.setBuildStatus("RUNNING");
+            stagesInfo.setBuildStatus(StageStatus.RUNNING.getValue());
         } else if (run.getResult() != null) {
             stagesInfo.setBuildStatus(run.getResult().toString());
         } else {
-            stagesInfo.setBuildStatus("UNKNOWN");
+            stagesInfo.setBuildStatus(StageStatus.UNKNOWN.getValue());
         }
 
         // Check if this is a WorkflowRun (Pipeline job)
@@ -1128,9 +1129,9 @@ public class WorkflowStageService {
 
             // Get stage status from StageNodeExt
             StatusExt statusExt = stageNode.getStatus();
-            String status = convertStatusExtToString(statusExt);
+            StageStatus status = convertStatusExtToEnum(statusExt);
             stageInfo.setStatus(status);
-            stageInfo.setExecuted(!"not_started".equals(status));
+            stageInfo.setExecuted(status != StageStatus.NOT_STARTED);
 
             // Get timing information
             Long startTimeMillis = stageNode.getStartTimeMillis();
@@ -1159,34 +1160,46 @@ public class WorkflowStageService {
     }
 
     /**
-     * Converts StatusExt to string status
+     * Converts StatusExt to StageStatus enum
      *
      * @param statusExt StatusExt from Pipeline REST API
-     * @return String status
+     * @return StageStatus enum
      */
-    private String convertStatusExtToString(StatusExt statusExt) {
+    private StageStatus convertStatusExtToEnum(StatusExt statusExt) {
         if (statusExt == null) {
-            return "unknown";
+            return StageStatus.UNKNOWN;
         }
 
         switch (statusExt) {
             case SUCCESS:
-                return "success";
+                return StageStatus.SUCCESS;
             case FAILED:
-                return "failed";
+                return StageStatus.FAILED;
             case IN_PROGRESS:
-                return "running";
+                return StageStatus.RUNNING;
             case ABORTED:
-                return "aborted";
+                return StageStatus.ABORTED;
             case NOT_EXECUTED:
-                return "not_started";
+                return StageStatus.NOT_STARTED;
             case PAUSED_PENDING_INPUT:
-                return "paused";
+                return StageStatus.PAUSED;
             case UNSTABLE:
-                return "unstable";
+                return StageStatus.UNSTABLE;
             default:
-                return "unknown";
+                return StageStatus.UNKNOWN;
         }
+    }
+
+    /**
+     * Converts StatusExt to string status (backward compatibility)
+     *
+     * @param statusExt StatusExt from Pipeline REST API
+     * @return String status
+     * @deprecated Use convertStatusExtToEnum instead
+     */
+    @Deprecated
+    private String convertStatusExtToString(StatusExt statusExt) {
+        return convertStatusExtToEnum(statusExt).getValue();
     }
 
     /**
@@ -1528,15 +1541,15 @@ public class WorkflowStageService {
             // Get build status
             Result result = workflowRun.getResult();
             if (result == null) {
-                allStage.setStatus("running");
+                allStage.setStatus(StageStatus.RUNNING);
             } else if (result == Result.SUCCESS) {
-                allStage.setStatus("success");
+                allStage.setStatus(StageStatus.SUCCESS);
             } else if (result == Result.FAILURE) {
-                allStage.setStatus("failed");
+                allStage.setStatus(StageStatus.FAILED);
             } else if (result == Result.ABORTED) {
-                allStage.setStatus("aborted");
+                allStage.setStatus(StageStatus.ABORTED);
             } else {
-                allStage.setStatus("unknown");
+                allStage.setStatus(StageStatus.UNKNOWN);
             }
 
             allStage.setExecuted(true);
@@ -1598,9 +1611,9 @@ public class WorkflowStageService {
             stageInfo.setName(stageName);
 
             // Get stage status
-            String status = getStageStatus(node, run);
+            StageStatus status = getStageStatusEnum(node, run);
             stageInfo.setStatus(status);
-            stageInfo.setExecuted(!"not_started".equals(status));
+            stageInfo.setExecuted(status != StageStatus.NOT_STARTED);
 
             // Get timing information
             TimingAction timingAction = node.getAction(TimingAction.class);
@@ -1659,20 +1672,20 @@ public class WorkflowStageService {
     }
 
     /**
-     * Gets the status of a stage from a FlowNode
+     * Gets the status of a stage from a FlowNode as enum
      *
      * @param node FlowNode
      * @param run WorkflowRun instance (optional, for checking paused status)
-     * @return Stage status
+     * @return Stage status enum
      */
-    private String getStageStatus(FlowNode node, WorkflowRun run) {
+    private StageStatus getStageStatusEnum(FlowNode node, WorkflowRun run) {
         try {
             if (node.isActive()) {
                 // Check if it's paused waiting for input
                 if (run != null && isPausedForInput(node, run)) {
-                    return "paused";
+                    return StageStatus.PAUSED;
                 }
-                return "running";
+                return StageStatus.RUNNING;
             }
 
             // Check error
@@ -1682,18 +1695,31 @@ public class WorkflowStageService {
                 org.jenkinsci.plugins.workflow.actions.ErrorAction errorAction =
                     node.getAction(org.jenkinsci.plugins.workflow.actions.ErrorAction.class);
                 if (errorAction != null) {
-                    return "failed";
+                    return StageStatus.FAILED;
                 }
             } catch (Exception e) {
                 LOGGER.log(Level.FINE, "Error checking error action: " + e.getMessage());
             }
 
-            return "success";
+            return StageStatus.SUCCESS;
 
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Error getting stage status: " + e.getMessage());
-            return "unknown";
+            return StageStatus.UNKNOWN;
         }
+    }
+
+    /**
+     * Gets the status of a stage from a FlowNode (backward compatibility)
+     *
+     * @param node FlowNode
+     * @param run WorkflowRun instance (optional, for checking paused status)
+     * @return Stage status string
+     * @deprecated Use getStageStatusEnum instead
+     */
+    @Deprecated
+    private String getStageStatus(FlowNode node, WorkflowRun run) {
+        return getStageStatusEnum(node, run).getValue();
     }
 
     /**
