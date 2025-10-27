@@ -3,6 +3,7 @@ package io.kanbanai.amtIntegration.model;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import io.kanbanai.amtIntegration.util.ValidationUtils;
 import io.kanbanai.amtIntegration.config.ApiConstants;
@@ -171,41 +172,14 @@ public class RenderedParametersInfo {
     }
     
     /**
-     * Converts object to JSON string
-     *
-     * Uses StringBuilder to create JSON instead of external library dependency
-     * to keep the plugin lightweight and compatible with multiple Jenkins versions
+     * Converts object to JSON string using Jackson ObjectMapper.
      *
      * @return JSON string representation of the object
+     * @deprecated Use JsonMapper.toJson(object) instead for better performance and maintainability
      */
+    @Deprecated
     public String toJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-
-        // Job information
-        sb.append("\"jobName\":").append(JsonUtils.toJsonString(jobName)).append(",");
-        sb.append("\"jobFullName\":").append(JsonUtils.toJsonString(jobFullName)).append(",");
-        sb.append("\"jobUrl\":").append(JsonUtils.toJsonString(jobUrl)).append(",");
-        sb.append("\"buildWithParametersUrl\":").append(JsonUtils.toJsonString(buildWithParametersUrl)).append(",");
-
-        // Plugin information
-        sb.append("\"activeChoicesPluginAvailable\":").append(JsonUtils.toJsonBoolean(activeChoicesPluginAvailable)).append(",");
-        sb.append("\"activeChoicesPluginVersion\":").append(JsonUtils.toJsonString(activeChoicesPluginVersion)).append(",");
-
-        // Parameters array
-        sb.append("\"parameters\":[");
-        if (parameters != null) {
-            for (int i = 0; i < parameters.size(); i++) {
-                sb.append(parameters.get(i).toJson());
-                if (i < parameters.size() - 1) {
-                    sb.append(",");
-                }
-            }
-        }
-        sb.append("]");
-
-        sb.append("}");
-        return sb.toString();
+        return JsonMapper.toJson(this);
     }
 
     /**

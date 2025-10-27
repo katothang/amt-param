@@ -1,5 +1,6 @@
 package io.kanbanai.amtIntegration.model;
 
+import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 
 import java.util.ArrayList;
@@ -173,36 +174,14 @@ public class StagesInfo {
     }
     
     /**
-     * Converts object to JSON string
+     * Converts object to JSON string using Jackson ObjectMapper.
      *
      * @return JSON string representation of the object
+     * @deprecated Use JsonMapper.toJson(object) instead for better performance and maintainability
      */
+    @Deprecated
     public String toJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        
-        // Build information
-        sb.append("\"jobName\":").append(JsonUtils.toJsonString(jobName)).append(",");
-        sb.append("\"jobFullName\":").append(JsonUtils.toJsonString(jobFullName)).append(",");
-        sb.append("\"buildNumber\":").append(JsonUtils.toJsonNumber(buildNumber)).append(",");
-        sb.append("\"buildUrl\":").append(JsonUtils.toJsonString(buildUrl)).append(",");
-        sb.append("\"buildStatus\":").append(JsonUtils.toJsonString(buildStatus)).append(",");
-        sb.append("\"isRunning\":").append(JsonUtils.toJsonBoolean(isRunning)).append(",");
-        
-        // Stages array
-        sb.append("\"stages\":[");
-        if (stages != null) {
-            for (int i = 0; i < stages.size(); i++) {
-                sb.append(stages.get(i).toJson());
-                if (i < stages.size() - 1) {
-                    sb.append(",");
-                }
-            }
-        }
-        sb.append("]");
-        
-        sb.append("}");
-        return sb.toString();
+        return JsonMapper.toJson(this);
     }
     
     @Override

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 
+import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import io.kanbanai.amtIntegration.util.ValidationUtils;
 
@@ -367,50 +368,14 @@ public class RenderedParameterInfo {
     }
 
     /**
-     * Converts object to JSON string
+     * Converts object to JSON string using Jackson ObjectMapper.
      *
      * @return JSON string representation of the object
+     * @deprecated Use JsonMapper.toJson(object) instead for better performance and maintainability
      */
+    @Deprecated
     public String toJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-
-        // Basic information
-        sb.append("\"name\":").append(JsonUtils.toJsonString(name)).append(",");
-        sb.append("\"type\":").append(JsonUtils.toJsonString(type)).append(",");
-        sb.append("\"description\":").append(JsonUtils.toJsonString(description)).append(",");
-
-        // CurrentValue - serialize as array if contains multiple values (comma-separated)
-        sb.append("\"currentValue\":").append(JsonUtils.serializeParameterValue(currentValue)).append(",");
-
-        // Input type
-        sb.append("\"inputType\":").append(JsonUtils.toJsonString(inputType != null ? inputType.getValue() : null)).append(",");
-
-        // Flags
-        sb.append("\"isDynamic\":").append(JsonUtils.toJsonBoolean(isDynamic)).append(",");
-        sb.append("\"isRequired\":").append(JsonUtils.toJsonBoolean(isRequired)).append(",");
-
-        // Error message
-        sb.append("\"errorMessage\":").append(JsonUtils.toJsonString(errorMessage)).append(",");
-
-        // Arrays
-        sb.append("\"dependencies\":").append(JsonUtils.toJsonArray(dependencies)).append(",");
-        sb.append("\"choices\":").append(JsonUtils.toJsonChoicesArray(choices)).append(",");
-
-        // Data field for DynamicReferenceParameter
-        // Clean data if it only contains "[]" or "[][]"
-        String cleanedData = JsonUtils.cleanDataField(data);
-        sb.append("\"data\":").append(JsonUtils.toJsonString(cleanedData)).append(",");
-
-        // Choice type for Active Choices parameters
-        sb.append("\"choiceType\":").append(JsonUtils.toJsonString(choiceType)).append(",");
-
-        // Raw script for Active Choices parameters
-        sb.append("\"rawScript\":").append(JsonUtils.toJsonString(rawScript)).append(",");
-        sb.append("\"rawScriptSandbox\":").append(rawScriptSandbox != null ? JsonUtils.toJsonBoolean(rawScriptSandbox) : "null");
-
-        sb.append("}");
-        return sb.toString();
+        return JsonMapper.toJson(this);
     }
 
     

@@ -15,6 +15,10 @@ import java.util.logging.Level;
 
 import org.kohsuke.stapler.verb.POST;
 import java.io.BufferedReader;
+import java.io.InputStream;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 
 import io.kanbanai.amtIntegration.service.ParameterRenderingService;
 import io.kanbanai.amtIntegration.service.PluginAvailabilityService;
@@ -24,6 +28,7 @@ import io.kanbanai.amtIntegration.model.StagesInfo;
 import io.kanbanai.amtIntegration.model.StageInfo;
 import io.kanbanai.amtIntegration.config.ApiConstants;
 import io.kanbanai.amtIntegration.config.MessageConstants;
+import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.ParameterParsingUtils;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import io.kanbanai.amtIntegration.util.ValidationUtils;
@@ -223,14 +228,15 @@ public class ParametersApiController implements RootAction {
 
     /**
      * Sends a successful JSON response.
-     * 
+     *
      * @param rsp HTTP response
      * @param parametersInfo the parameters information to send
      * @throws IOException if I/O error occurs
      */
     private void sendSuccessResponse(StaplerResponse rsp, RenderedParametersInfo parametersInfo) throws IOException {
         rsp.setStatus(ApiConstants.HTTP_OK);
-        rsp.getWriter().write(parametersInfo.toJson());
+        String json = JsonMapper.createSuccessResponse(parametersInfo);
+        rsp.getWriter().write(json);
     }
 
     /**
@@ -244,14 +250,12 @@ public class ParametersApiController implements RootAction {
      */
     private void sendErrorResponse(StaplerResponse rsp, int statusCode, String message, String details) throws IOException {
         rsp.setStatus(statusCode);
-
-        String errorJson = JsonUtils.createJsonObject(
-            ApiConstants.JSON_FIELD_ERROR, "true",
-            ApiConstants.JSON_FIELD_MESSAGE, ValidationUtils.sanitizeForLogging(message),
-            ApiConstants.JSON_FIELD_DETAILS, ValidationUtils.sanitizeForLogging(details)
+        String json = JsonMapper.createErrorResponse(
+            ValidationUtils.sanitizeForLogging(message),
+            ValidationUtils.sanitizeForLogging(details),
+            statusCode
         );
-
-        rsp.getWriter().write(errorJson);
+        rsp.getWriter().write(json);
     }
 
     // ========== STAGE API METHODS ==========
@@ -894,14 +898,8 @@ public class ParametersApiController implements RootAction {
      */
     private void sendStagesSuccessResponse(StaplerResponse rsp, StagesInfo stagesInfo) throws IOException {
         rsp.setStatus(ApiConstants.HTTP_OK);
-
-        StringBuilder json = new StringBuilder();
-        json.append("{");
-        json.append("\"success\":true,");
-        json.append("\"data\":").append(stagesInfo.toJson());
-        json.append("}");
-
-        rsp.getWriter().write(json.toString());
+        String json = JsonMapper.createSuccessResponse(stagesInfo);
+        rsp.getWriter().write(json);
     }
 
     /**
@@ -913,15 +911,12 @@ public class ParametersApiController implements RootAction {
      */
     private void sendSubmitSuccessResponse(StaplerResponse rsp, String inputId) throws IOException {
         rsp.setStatus(ApiConstants.HTTP_OK);
-
-        StringBuilder json = new StringBuilder();
-        json.append("{");
-        json.append("\"success\":true,");
-        json.append("\"message\":\"Input submitted successfully\",");
-        json.append("\"inputId\":").append(jsonString(inputId));
-        json.append("}");
-
-        rsp.getWriter().write(json.toString());
+        Map<String, Object> data = Map.of(
+            "message", "Input submitted successfully",
+            "inputId", inputId
+        );
+        String json = JsonMapper.createSuccessResponse(data);
+        rsp.getWriter().write(json);
     }
 
     /**
@@ -933,15 +928,12 @@ public class ParametersApiController implements RootAction {
      */
     private void sendAbortSuccessResponse(StaplerResponse rsp, String inputId) throws IOException {
         rsp.setStatus(ApiConstants.HTTP_OK);
-
-        StringBuilder json = new StringBuilder();
-        json.append("{");
-        json.append("\"success\":true,");
-        json.append("\"message\":\"Input aborted successfully\",");
-        json.append("\"inputId\":").append(jsonString(inputId));
-        json.append("}");
-
-        rsp.getWriter().write(json.toString());
+        Map<String, Object> data = Map.of(
+            "message", "Input aborted successfully",
+            "inputId", inputId
+        );
+        String json = JsonMapper.createSuccessResponse(data);
+        rsp.getWriter().write(json);
     }
 
     /**
@@ -953,92 +945,33 @@ public class ParametersApiController implements RootAction {
      */
     private void sendStageLogResponse(StaplerResponse rsp, StageInfo stageInfo) throws IOException {
         rsp.setStatus(ApiConstants.HTTP_OK);
-
-        StringBuilder json = new StringBuilder();
-        json.append("{");
-        json.append("\"success\":true,");
-        json.append("\"data\":").append(stageInfo.toJson());
-        json.append("}");
-
-        rsp.getWriter().write(json.toString());
+        String json = JsonMapper.createSuccessResponse(stageInfo);
+        rsp.getWriter().write(json);
     }
 
     /**
-     * Parse JSON body from request.
+     * Parse JSON body from request using Jackson ObjectMapper directly.
      *
      * @param req HTTP request
      * @return Map of parsed JSON data
      * @throws IOException if I/O error occurs
      */
     private Map<String, Object> parseJsonBody(StaplerRequest req) throws IOException {
-        Map<String, Object> result = new HashMap<>();
+        ObjectMapper objectMapper = new ObjectMapper();
 
-        try {
-            BufferedReader reader = req.getReader();
-            StringBuilder body = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                body.append(line);
-            }
+        try (InputStream inputStream = req.getInputStream()) {
+            // Read JSON directly from InputStream using ObjectMapper
+            TypeReference<Map<String, Object>> typeRef = new TypeReference<Map<String, Object>>() {};
+            Map<String, Object> result = objectMapper.readValue(inputStream, typeRef);
 
-            String jsonBody = body.toString().trim();
-            LOGGER.log(Level.INFO, "Raw JSON body: " + jsonBody);
+            LOGGER.log(Level.INFO, "Parsed JSON body: " + result);
 
-            if (jsonBody.isEmpty() || !jsonBody.startsWith("{")) {
-                return result;
-            }
-
-            // Remove outer braces
-            jsonBody = jsonBody.substring(1, jsonBody.length() - 1);
-
-            // Split by comma, but not inside nested objects or arrays
-            String[] pairs = jsonBody.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)(?![^{]*})");
-
-            for (String pair : pairs) {
-                String[] keyValue = pair.split(":", 2);
-                if (keyValue.length == 2) {
-                    String key = keyValue[0].trim().replaceAll("^\"|\"$", "");
-                    String value = keyValue[1].trim();
-
-                    // Check if value is a nested object
-                    if (value.startsWith("{") && value.endsWith("}")) {
-                        // Parse nested object
-                        Map<String, Object> nestedMap = new HashMap<>();
-                        String nestedBody = value.substring(1, value.length() - 1);
-                        String[] nestedPairs = nestedBody.split(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
-
-                        for (String nestedPair : nestedPairs) {
-                            String[] nestedKeyValue = nestedPair.split(":", 2);
-                            if (nestedKeyValue.length == 2) {
-                                String nestedKey = nestedKeyValue[0].trim().replaceAll("^\"|\"$", "");
-                                String nestedValue = nestedKeyValue[1].trim();
-
-                                // Check for boolean values BEFORE removing quotes
-                                if ("true".equalsIgnoreCase(nestedValue)) {
-                                    nestedMap.put(nestedKey, true);
-                                } else if ("false".equalsIgnoreCase(nestedValue)) {
-                                    nestedMap.put(nestedKey, false);
-                                } else {
-                                    // Remove quotes for string values
-                                    nestedValue = nestedValue.replaceAll("^\"|\"$", "");
-                                    nestedMap.put(nestedKey, nestedValue);
-                                }
-                            }
-                        }
-                        result.put(key, nestedMap);
-                    } else {
-                        // Simple value
-                        value = value.replaceAll("^\"|\"$", "");
-                        result.put(key, value);
-                    }
-                }
-            }
+            return result != null ? result : new HashMap<>();
 
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error parsing JSON body: " + e.getMessage(), e);
+            return new HashMap<>();
         }
-
-        return result;
     }
 
     /**

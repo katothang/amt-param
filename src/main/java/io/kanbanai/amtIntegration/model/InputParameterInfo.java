@@ -1,5 +1,8 @@
 package io.kanbanai.amtIntegration.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -50,13 +53,17 @@ public class InputParameterInfo {
 
     /**
      * List of choices (for choice/select parameters) - kept for backward compatibility
+     * Hidden from JSON output, use choicesFormatted instead
      */
+    @JsonIgnore
     private List<String> choices;
 
     /**
      * Map of choices with key-value pairs (for choice/select parameters)
      * Key = value to submit, Value = display text
+     * Hidden from JSON output, use choicesFormatted instead
      */
+    @JsonIgnore
     private Map<String, String> choicesMap;
 
     /**
@@ -151,6 +158,37 @@ public class InputParameterInfo {
         this.choicesMap = choicesMap != null ? choicesMap : new LinkedHashMap<>();
     }
 
+    /**
+     * Gets formatted choices as list of key-value objects for JSON serialization.
+     * This is the property that will be serialized to JSON.
+     *
+     * @return list of choice objects with key and value
+     */
+    @JsonProperty("choices")
+    public List<Map<String, String>> getChoicesFormatted() {
+        List<Map<String, String>> formatted = new ArrayList<>();
+
+        if (choicesMap != null && !choicesMap.isEmpty()) {
+            // Use choicesMap for key-value format
+            for (Map.Entry<String, String> entry : choicesMap.entrySet()) {
+                Map<String, String> choice = new LinkedHashMap<>();
+                choice.put("key", entry.getKey());
+                choice.put("value", entry.getValue());
+                formatted.add(choice);
+            }
+        } else if (choices != null && !choices.isEmpty()) {
+            // Fallback to simple string array if choicesMap is empty
+            for (String choice : choices) {
+                Map<String, String> choiceObj = new LinkedHashMap<>();
+                choiceObj.put("key", choice);
+                choiceObj.put("value", choice);
+                formatted.add(choiceObj);
+            }
+        }
+
+        return formatted;
+    }
+
     public boolean isRequired() {
         return required;
     }
@@ -160,52 +198,14 @@ public class InputParameterInfo {
     }
     
     /**
-     * Converts object to JSON string
+     * Converts object to JSON string using Jackson ObjectMapper.
      *
      * @return JSON string representation of the object
+     * @deprecated Use JsonMapper.toJson(object) instead for better performance and maintainability
      */
+    @Deprecated
     public String toJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-
-        sb.append("\"name\":").append(JsonUtils.toJsonString(name)).append(",");
-        sb.append("\"type\":").append(JsonUtils.toJsonString(type)).append(",");
-        sb.append("\"description\":").append(JsonUtils.toJsonString(description)).append(",");
-        sb.append("\"defaultValue\":").append(JsonUtils.toJsonString(defaultValue)).append(",");
-        sb.append("\"inputType\":").append(JsonUtils.toJsonString(inputType)).append(",");
-        sb.append("\"required\":").append(JsonUtils.toJsonBoolean(required)).append(",");
-
-        // Choices array - format as array of objects with key and value
-        sb.append("\"choices\":[");
-        if (choicesMap != null && !choicesMap.isEmpty()) {
-            // Use choicesMap for key-value format
-            int i = 0;
-            for (Map.Entry<String, String> entry : choicesMap.entrySet()) {
-                sb.append("{");
-                sb.append("\"key\":").append(JsonUtils.toJsonString(entry.getKey())).append(",");
-                sb.append("\"value\":").append(JsonUtils.toJsonString(entry.getValue()));
-                sb.append("}");
-                if (i < choicesMap.size() - 1) {
-                    sb.append(",");
-                }
-                i++;
-            }
-        } else if (choices != null && !choices.isEmpty()) {
-            // Fallback to simple string array if choicesMap is empty
-            for (int i = 0; i < choices.size(); i++) {
-                sb.append("{");
-                sb.append("\"key\":").append(JsonUtils.toJsonString(choices.get(i))).append(",");
-                sb.append("\"value\":").append(JsonUtils.toJsonString(choices.get(i)));
-                sb.append("}");
-                if (i < choices.size() - 1) {
-                    sb.append(",");
-                }
-            }
-        }
-        sb.append("]");
-
-        sb.append("}");
-        return sb.toString();
+        return JsonMapper.toJson(this);
     }
     
     @Override

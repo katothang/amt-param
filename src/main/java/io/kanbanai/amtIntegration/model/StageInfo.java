@@ -1,5 +1,6 @@
 package io.kanbanai.amtIntegration.model;
 
+import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import java.util.ArrayList;
 import java.util.List;
@@ -281,45 +282,14 @@ public class StageInfo {
     }
     
     /**
-     * Converts object to JSON string
+     * Converts object to JSON string using Jackson ObjectMapper.
      *
      * @return JSON string representation of the object
+     * @deprecated Use JsonMapper.toJson(object) instead for better performance and maintainability
      */
+    @Deprecated
     public String toJson() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-
-        sb.append("\"id\":").append(JsonUtils.toJsonString(id)).append(",");
-        sb.append("\"inputId\":").append(JsonUtils.toJsonString(inputId)).append(",");
-        sb.append("\"name\":").append(JsonUtils.toJsonString(name)).append(",");
-        sb.append("\"status\":").append(JsonUtils.toJsonString(status)).append(",");
-        sb.append("\"message\":").append(JsonUtils.toJsonString(message)).append(",");
-        sb.append("\"submitter\":").append(JsonUtils.toJsonString(submitter)).append(",");
-        sb.append("\"submitUrl\":").append(JsonUtils.toJsonString(submitUrl)).append(",");
-        sb.append("\"abortUrl\":").append(JsonUtils.toJsonString(abortUrl)).append(",");
-        sb.append("\"proceedText\":").append(JsonUtils.toJsonString(proceedText)).append(",");
-        sb.append("\"proceedUrl\":").append(JsonUtils.toJsonString(proceedUrl)).append(",");
-        sb.append("\"executed\":").append(JsonUtils.toJsonBoolean(executed)).append(",");
-
-        // Parameters array
-        sb.append("\"parameters\":[");
-        if (parameters != null && !parameters.isEmpty()) {
-            for (int i = 0; i < parameters.size(); i++) {
-                sb.append(parameters.get(i).toJson());
-                if (i < parameters.size() - 1) {
-                    sb.append(",");
-                }
-            }
-        }
-        sb.append("],");
-
-        // Logs and timing information
-        sb.append("\"logs\":").append(JsonUtils.toJsonString(logs)).append(",");
-        sb.append("\"startTimeMillis\":").append(startTimeMillis != null ? startTimeMillis : "null").append(",");
-        sb.append("\"durationMillis\":").append(durationMillis != null ? durationMillis : "null");
-
-        sb.append("}");
-        return sb.toString();
+        return JsonMapper.toJson(this);
     }
     
     @Override
