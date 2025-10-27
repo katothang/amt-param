@@ -973,21 +973,4 @@ public class ParametersApiController implements RootAction {
             return new HashMap<>();
         }
     }
-
-    /**
-     * Escapes a string for JSON.
-     *
-     * @param str String to escape
-     * @return Escaped JSON string
-     */
-    private String jsonString(String str) {
-        if (str == null) {
-            return "null";
-        }
-        return "\"" + str.replace("\\", "\\\\")
-                         .replace("\"", "\\\"")
-                         .replace("\n", "\\n")
-                         .replace("\r", "\\r")
-                         .replace("\t", "\\t") + "\"";
-    }
 }

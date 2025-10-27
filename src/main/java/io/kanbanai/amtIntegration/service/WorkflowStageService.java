@@ -8,6 +8,7 @@ import io.kanbanai.amtIntegration.model.StageInfo;
 import io.kanbanai.amtIntegration.model.StageStatus;
 import io.kanbanai.amtIntegration.model.StagesInfo;
 import io.kanbanai.amtIntegration.model.InputParameterInfo;
+import io.kanbanai.amtIntegration.model.ParameterInputType;
 import jenkins.model.Jenkins;
 
 // Workflow plugin imports
@@ -778,8 +779,8 @@ public class WorkflowStageService {
             }
 
             // Determine input type based on parameter type
-            String inputType = determineInputType(type);
-            paramInfo.setInputType(inputType);
+            ParameterInputType inputType = determineInputType(type);
+            paramInfo.setInputType(inputType.getValue());
 
             // Set choices for ChoiceParameterDefinition
             if ("ChoiceParameterDefinition".equals(type)) {
@@ -854,19 +855,19 @@ public class WorkflowStageService {
      * Determines input type based on parameter type
      *
      * @param type Parameter type class name
-     * @return Input type string
+     * @return ParameterInputType enum
      */
-    private String determineInputType(String type) {
+    private ParameterInputType determineInputType(String type) {
         if (type.contains("BooleanParameterDefinition")) {
-            return "checkbox";
+            return ParameterInputType.CHECKBOX;
         } else if (type.contains("ChoiceParameterDefinition")) {
-            return "select";
+            return ParameterInputType.SELECT;
         } else if (type.contains("PasswordParameterDefinition")) {
-            return "password";
+            return ParameterInputType.PASSWORD;
         } else if (type.contains("TextParameterDefinition")) {
-            return "textarea";
+            return ParameterInputType.TEXTAREA;
         } else {
-            return "text";
+            return ParameterInputType.TEXT;
         }
     }
 
@@ -880,14 +881,14 @@ public class WorkflowStageService {
     private void determineInputTypeAndChoices(Object paramDef, InputParameterInfo paramInfo, String type) {
         try {
             if (type.contains("BooleanParameterDefinition")) {
-                paramInfo.setInputType("checkbox");
+                paramInfo.setInputType(ParameterInputType.CHECKBOX.getValue());
                 List<String> choices = new ArrayList<>();
                 choices.add("true");
                 choices.add("false");
                 paramInfo.setChoices(choices);
 
             } else if (type.contains("ChoiceParameterDefinition")) {
-                paramInfo.setInputType("select");
+                paramInfo.setInputType(ParameterInputType.SELECT.getValue());
                 // Get choices
                 try {
                     Object choicesObj = invokeMethod(paramDef, "getChoices");
@@ -904,19 +905,19 @@ public class WorkflowStageService {
                 }
 
             } else if (type.contains("PasswordParameterDefinition")) {
-                paramInfo.setInputType("password");
+                paramInfo.setInputType(ParameterInputType.PASSWORD.getValue());
 
             } else if (type.contains("TextParameterDefinition")) {
-                paramInfo.setInputType("textarea");
+                paramInfo.setInputType(ParameterInputType.TEXTAREA.getValue());
 
             } else {
                 // Default to text input
-                paramInfo.setInputType("text");
+                paramInfo.setInputType(ParameterInputType.TEXT.getValue());
             }
 
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Error determining input type: " + e.getMessage());
-            paramInfo.setInputType("text");
+            paramInfo.setInputType(ParameterInputType.TEXT.getValue());
         }
     }
 
@@ -1144,7 +1145,7 @@ public class WorkflowStageService {
             stageInfo.setLogs(logs);
 
             // If stage is paused (waiting for input), populate input information
-            if ("paused".equals(status)) {
+            if (status == StageStatus.PAUSED) {
                 LOGGER.log(Level.WARNING, "Stage is paused, looking for input: " + stageName);
                 populateInputInfoForPausedStage(stageInfo, stageId, run);
             }
@@ -1639,7 +1640,7 @@ public class WorkflowStageService {
             stageInfo.setLogs(logs);
 
             // If stage is paused (waiting for input), populate input information
-            if ("paused".equals(status)) {
+            if (status == StageStatus.PAUSED) {
                 LOGGER.log(Level.WARNING, "Stage is paused (fallback), looking for input: " + stageName);
                 populateInputInfoForPausedStage(stageInfo, stageId, run);
             }
