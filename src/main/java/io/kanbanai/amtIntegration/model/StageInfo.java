@@ -1,5 +1,6 @@
 package io.kanbanai.amtIntegration.model;
 
+import com.cloudbees.workflow.rest.external.StatusExt;
 import io.kanbanai.amtIntegration.util.JsonMapper;
 import io.kanbanai.amtIntegration.util.JsonUtils;
 import java.util.ArrayList;
@@ -40,7 +41,8 @@ public class StageInfo {
     /**
      * Status of the stage
      */
-    private StageStatus status;
+    private StatusExt status;
+
     
     /**
      * Message displayed for the input prompt
@@ -101,7 +103,7 @@ public class StageInfo {
      * Default constructor
      */
     public StageInfo() {
-        this.status = StageStatus.NOT_STARTED;
+        this.status = StatusExt.NOT_EXECUTED;
         this.executed = false;
         this.parameters = new ArrayList<>();
         this.logs = "";
@@ -114,26 +116,13 @@ public class StageInfo {
      * @param name Stage name
      * @param status Stage status
      */
-    public StageInfo(String id, String name, StageStatus status) {
+    public StageInfo(String id, String name, StatusExt status) {
         this();
         this.id = id;
         this.name = name;
         this.status = status;
     }
 
-    /**
-     * Constructor with basic information (backward compatibility)
-     *
-     * @param id Stage/input ID
-     * @param name Stage name
-     * @param status Stage status as string
-     * @deprecated Use constructor with StageStatus enum instead
-     */
-    @Deprecated
-    public StageInfo(String id, String name, String status) {
-        this(id, name, StageStatus.fromValue(status));
-    }
-    
     // Getters and Setters
     
     public String getId() {
@@ -159,35 +148,17 @@ public class StageInfo {
     public void setName(String name) {
         this.name = name;
     }
-    
-    public StageStatus getStatus() {
+
+    public StatusExt getStatus() {
         return status;
     }
 
-    /**
-     * Gets the status as string value (for backward compatibility)
-     *
-     * @return Status string value
-     */
-    public String getStatusValue() {
-        return status != null ? status.getValue() : null;
-    }
 
-    public void setStatus(StageStatus status) {
+
+    public void setStatus(StatusExt status) {
         this.status = status;
     }
 
-    /**
-     * Sets the status from string value (for backward compatibility)
-     *
-     * @param status Status string value
-     * @deprecated Use setStatus(StageStatus) instead
-     */
-    @Deprecated
-    public void setStatus(String status) {
-        this.status = StageStatus.fromValue(status);
-    }
-    
     public String getMessage() {
         return message;
     }
@@ -293,16 +264,7 @@ public class StageInfo {
      * @return true if status is PENDING, false otherwise
      */
     public boolean isPending() {
-        return status == StageStatus.PENDING;
-    }
-
-    /**
-     * Checks whether the stage has been approved
-     *
-     * @return true if status is APPROVED, false otherwise
-     */
-    public boolean isApproved() {
-        return status == StageStatus.APPROVED;
+        return status == StatusExt.PAUSED_PENDING_INPUT;
     }
 
     /**
@@ -311,7 +273,7 @@ public class StageInfo {
      * @return true if status is ABORTED, false otherwise
      */
     public boolean isAborted() {
-        return status == StageStatus.ABORTED;
+        return status == StatusExt.ABORTED;
     }
 
     /**
@@ -320,7 +282,7 @@ public class StageInfo {
      * @return true if status is RUNNING, false otherwise
      */
     public boolean isRunning() {
-        return status == StageStatus.RUNNING;
+        return status == StatusExt.IN_PROGRESS;
     }
 
     /**
@@ -329,7 +291,7 @@ public class StageInfo {
      * @return true if status is SUCCESS or APPROVED, false otherwise
      */
     public boolean isSuccessful() {
-        return status != null && status.isSuccessful();
+        return status == StatusExt.SUCCESS;
     }
 
     /**
@@ -338,20 +300,10 @@ public class StageInfo {
      * @return true if status is FAILED or ABORTED, false otherwise
      */
     public boolean isFailed() {
-        return status != null && status.isFailed();
+        return status == StatusExt.FAILED;
     }
     
-    /**
-     * Converts object to JSON string using Jackson ObjectMapper.
-     *
-     * @return JSON string representation of the object
-     * @deprecated Use JsonMapper.toJson(object) instead for better performance and maintainability
-     */
-    @Deprecated
-    public String toJson() {
-        return JsonMapper.toJson(this);
-    }
-    
+
     @Override
     public String toString() {
         return "StageInfo{" +
@@ -381,24 +333,12 @@ public class StageInfo {
             this.stageInfo.setName(name);
         }
         
-        public Builder status(StageStatus status) {
+        public Builder status(StatusExt status) {
             this.stageInfo.setStatus(status);
             return this;
         }
 
-        /**
-         * Sets status from string value (backward compatibility)
-         *
-         * @param status Status string value
-         * @return Builder instance
-         * @deprecated Use status(StageStatus) instead
-         */
-        @Deprecated
-        public Builder status(String status) {
-            this.stageInfo.setStatus(StageStatus.fromValue(status));
-            return this;
-        }
-        
+
         public Builder message(String message) {
             this.stageInfo.setMessage(message);
             return this;

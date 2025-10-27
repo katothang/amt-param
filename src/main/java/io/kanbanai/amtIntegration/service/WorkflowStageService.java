@@ -5,7 +5,6 @@ import hudson.model.Result;
 import hudson.model.ParameterDefinition;
 import hudson.model.ParameterValue;
 import io.kanbanai.amtIntegration.model.StageInfo;
-import io.kanbanai.amtIntegration.model.StageStatus;
 import io.kanbanai.amtIntegration.model.StagesInfo;
 import io.kanbanai.amtIntegration.model.InputParameterInfo;
 import io.kanbanai.amtIntegration.model.ParameterInputType;
@@ -32,13 +31,11 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 
 /**
  * Service specialized in handling Jenkins Workflow/Pipeline stages and input steps.
@@ -112,11 +109,11 @@ public class WorkflowStageService {
         
         // Set build status
         if (run.isBuilding()) {
-            stagesInfo.setBuildStatus(StageStatus.RUNNING.getValue());
+            stagesInfo.setBuildStatus(StatusExt.IN_PROGRESS.name());
         } else if (run.getResult() != null) {
             stagesInfo.setBuildStatus(run.getResult().toString());
         } else {
-            stagesInfo.setBuildStatus(StageStatus.UNKNOWN.getValue());
+            stagesInfo.setBuildStatus(StatusExt.UNSTABLE.name());
         }
         
         // Check if this is a WorkflowRun (Pipeline job)
@@ -565,8 +562,7 @@ public class WorkflowStageService {
 
             // Determine status
             // If execution exists in the list, it's pending
-            stageInfo.setStatus(StageStatus.PENDING);
-            stageInfo.setExecuted(false);
+            stageInfo.setStatus(StatusExt.PAUSED_PENDING_INPUT);
 
             // Build URLs
             String baseUrl = getBuildUrl(run);
@@ -634,7 +630,7 @@ public class WorkflowStageService {
             stageInfo.setSubmitter(submitter);
 
             // Determine status - pending input
-            stageInfo.setStatus(StageStatus.PENDING);
+            stageInfo.setStatus(StatusExt.PAUSED_PENDING_INPUT);
             stageInfo.setExecuted(false);
 
             // Build URLs
@@ -999,11 +995,11 @@ public class WorkflowStageService {
 
         // Set build status
         if (run.isBuilding()) {
-            stagesInfo.setBuildStatus(StageStatus.RUNNING.getValue());
+            stagesInfo.setBuildStatus(StatusExt.IN_PROGRESS.name());
         } else if (run.getResult() != null) {
             stagesInfo.setBuildStatus(run.getResult().toString());
         } else {
-            stagesInfo.setBuildStatus(StageStatus.UNKNOWN.getValue());
+            stagesInfo.setBuildStatus(StatusExt.UNSTABLE.name());
         }
 
         // Check if this is a WorkflowRun (Pipeline job)
@@ -1130,9 +1126,8 @@ public class WorkflowStageService {
 
             // Get stage status from StageNodeExt
             StatusExt statusExt = stageNode.getStatus();
-            StageStatus status = convertStatusExtToEnum(statusExt);
-            stageInfo.setStatus(status);
-            stageInfo.setExecuted(status != StageStatus.NOT_STARTED);
+            stageInfo.setStatus(statusExt);
+            stageInfo.setExecuted(statusExt != StatusExt.NOT_EXECUTED);
 
             // Get timing information
             Long startTimeMillis = stageNode.getStartTimeMillis();
@@ -1145,12 +1140,10 @@ public class WorkflowStageService {
             stageInfo.setLogs(logs);
 
             // If stage is paused (waiting for input), populate input information
-            if (status == StageStatus.PAUSED) {
+            if (statusExt == StatusExt.PAUSED_PENDING_INPUT) {
                 LOGGER.log(Level.WARNING, "Stage is paused, looking for input: " + stageName);
                 populateInputInfoForPausedStage(stageInfo, stageId, run);
             }
-
-            LOGGER.log(Level.FINE, "Extracted stage: " + stageName + " (id: " + stageId + ", status: " + status + ")");
 
             return stageInfo;
 
@@ -1160,48 +1153,6 @@ public class WorkflowStageService {
         }
     }
 
-    /**
-     * Converts StatusExt to StageStatus enum
-     *
-     * @param statusExt StatusExt from Pipeline REST API
-     * @return StageStatus enum
-     */
-    private StageStatus convertStatusExtToEnum(StatusExt statusExt) {
-        if (statusExt == null) {
-            return StageStatus.UNKNOWN;
-        }
-
-        switch (statusExt) {
-            case SUCCESS:
-                return StageStatus.SUCCESS;
-            case FAILED:
-                return StageStatus.FAILED;
-            case IN_PROGRESS:
-                return StageStatus.RUNNING;
-            case ABORTED:
-                return StageStatus.ABORTED;
-            case NOT_EXECUTED:
-                return StageStatus.NOT_STARTED;
-            case PAUSED_PENDING_INPUT:
-                return StageStatus.PAUSED;
-            case UNSTABLE:
-                return StageStatus.UNSTABLE;
-            default:
-                return StageStatus.UNKNOWN;
-        }
-    }
-
-    /**
-     * Converts StatusExt to string status (backward compatibility)
-     *
-     * @param statusExt StatusExt from Pipeline REST API
-     * @return String status
-     * @deprecated Use convertStatusExtToEnum instead
-     */
-    @Deprecated
-    private String convertStatusExtToString(StatusExt statusExt) {
-        return convertStatusExtToEnum(statusExt).getValue();
-    }
 
     /**
      * Populates input information for a paused stage
@@ -1542,15 +1493,15 @@ public class WorkflowStageService {
             // Get build status
             Result result = workflowRun.getResult();
             if (result == null) {
-                allStage.setStatus(StageStatus.RUNNING);
+                allStage.setStatus(StatusExt.IN_PROGRESS);
             } else if (result == Result.SUCCESS) {
-                allStage.setStatus(StageStatus.SUCCESS);
+                allStage.setStatus(StatusExt.SUCCESS);
             } else if (result == Result.FAILURE) {
-                allStage.setStatus(StageStatus.FAILED);
+                allStage.setStatus(StatusExt.FAILED);
             } else if (result == Result.ABORTED) {
-                allStage.setStatus(StageStatus.ABORTED);
+                allStage.setStatus(StatusExt.ABORTED);
             } else {
-                allStage.setStatus(StageStatus.UNKNOWN);
+                allStage.setStatus(StatusExt.UNSTABLE);
             }
 
             allStage.setExecuted(true);
@@ -1612,9 +1563,9 @@ public class WorkflowStageService {
             stageInfo.setName(stageName);
 
             // Get stage status
-            StageStatus status = getStageStatusEnum(node, run);
+            StatusExt status = getStageStatusEnum(node, run);
             stageInfo.setStatus(status);
-            stageInfo.setExecuted(status != StageStatus.NOT_STARTED);
+            stageInfo.setExecuted(status != StatusExt.NOT_EXECUTED);
 
             // Get timing information
             TimingAction timingAction = node.getAction(TimingAction.class);
@@ -1640,7 +1591,7 @@ public class WorkflowStageService {
             stageInfo.setLogs(logs);
 
             // If stage is paused (waiting for input), populate input information
-            if (status == StageStatus.PAUSED) {
+            if (status == StatusExt.PAUSED_PENDING_INPUT) {
                 LOGGER.log(Level.WARNING, "Stage is paused (fallback), looking for input: " + stageName);
                 populateInputInfoForPausedStage(stageInfo, stageId, run);
             }
@@ -1679,14 +1630,14 @@ public class WorkflowStageService {
      * @param run WorkflowRun instance (optional, for checking paused status)
      * @return Stage status enum
      */
-    private StageStatus getStageStatusEnum(FlowNode node, WorkflowRun run) {
+    private StatusExt getStageStatusEnum(FlowNode node, WorkflowRun run) {
         try {
             if (node.isActive()) {
                 // Check if it's paused waiting for input
                 if (run != null && isPausedForInput(node, run)) {
-                    return StageStatus.PAUSED;
+                    return StatusExt.PAUSED_PENDING_INPUT;
                 }
-                return StageStatus.RUNNING;
+                return StatusExt.IN_PROGRESS;
             }
 
             // Check error
@@ -1696,32 +1647,21 @@ public class WorkflowStageService {
                 org.jenkinsci.plugins.workflow.actions.ErrorAction errorAction =
                     node.getAction(org.jenkinsci.plugins.workflow.actions.ErrorAction.class);
                 if (errorAction != null) {
-                    return StageStatus.FAILED;
+                    return StatusExt.FAILED;
                 }
             } catch (Exception e) {
                 LOGGER.log(Level.FINE, "Error checking error action: " + e.getMessage());
             }
 
-            return StageStatus.SUCCESS;
+            return StatusExt.SUCCESS;
 
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Error getting stage status: " + e.getMessage());
-            return StageStatus.UNKNOWN;
+            return StatusExt.UNSTABLE;
         }
     }
 
-    /**
-     * Gets the status of a stage from a FlowNode (backward compatibility)
-     *
-     * @param node FlowNode
-     * @param run WorkflowRun instance (optional, for checking paused status)
-     * @return Stage status string
-     * @deprecated Use getStageStatusEnum instead
-     */
-    @Deprecated
-    private String getStageStatus(FlowNode node, WorkflowRun run) {
-        return getStageStatusEnum(node, run).getValue();
-    }
+
 
     /**
      * Checks if a node is paused waiting for input
